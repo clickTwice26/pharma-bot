@@ -51,8 +51,8 @@
                 </div>
                 {% if not schedule.taken and not schedule.skipped %}
                 <div class="schedule-actions">
-                    <button class="btn btn-success btn-sm btn-icon" onclick="markTaken({{ schedule.id }})">✓</button>
-                    <button class="btn btn-secondary btn-sm btn-icon" onclick="markSkipped({{ schedule.id }})">✕</button>
+                    <button class="btn btn-success btn-sm btn-icon" onclick="markTaken({{ schedule.id }})"><i class="fas fa-check"></i></button>
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="markSkipped({{ schedule.id }})"><i class="fas fa-times"></i></button>
                 </div>
                 {% endif %}
             </div>
@@ -60,7 +60,7 @@
         </div>
         {% else %}
         <div class="empty-state">
-            <div class="empty-icon">😊</div>
+            <div class="empty-icon"><i class="fas fa-calendar-check"></i></div>
             <p class="empty-text">No medications scheduled for today</p>
         </div>
         {% endif %}
@@ -76,7 +76,7 @@
         {% if prescriptions %}
         {% for prescription in prescriptions %}
         <div class="device-card">
-            <div class="device-icon">📄</div>
+            <div class="device-icon"><i class="fas fa-file-medical"></i></div>
             <div class="device-info">
                 <div class="device-name">
                     {% if prescription.doctor_name %}
@@ -94,7 +94,7 @@
         {% endfor %}
         {% else %}
         <div class="empty-state">
-            <div class="empty-icon">📋</div>
+            <div class="empty-icon"><i class="fas fa-file-prescription"></i></div>
             <p class="empty-text">No prescriptions yet</p>
         </div>
         {% endif %}
@@ -108,7 +108,7 @@
         </div>
         {% for device in devices %}
         <div class="device-card">
-            <div class="device-icon">📱</div>
+            <div class="device-icon"><i class="fas fa-microchip"></i></div>
             <div class="device-info">
                 <div class="device-name">{{ device.device_name }}</div>
                 <div class="device-status">
