@@ -1,0 +1,159 @@
+{% extends "mobile_base.html" %}
+
+{% block title %}Devices - MediTrack{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <h1>IoT Devices 📱</h1>
+    <p>Manage your ESP32 devices</p>
+</header>
+
+<div class="app-content">
+    <!-- Add Device Section -->
+    <div class="card">
+        <h2 class="card-title mb-2">Register New Device</h2>
+        <form id="deviceForm" class="form">
+            <div class="form-group">
+                <label class="form-label">Device ID</label>
+                <input type="text" class="form-control" id="device_id" placeholder="ESP32 MAC address or ID" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Device Name</label>
+                <input type="text" class="form-control" id="device_name" placeholder="e.g., Bedroom Dispenser" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">IP Address (Optional)</label>
+                <input type="text" class="form-control" id="ip_address" placeholder="e.g., 192.168.1.100">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">
+                ➕ Register Device
+            </button>
+        </form>
+    </div>
+
+    <!-- Devices List -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">My Devices</h2>
+            <span class="badge badge-info">{{ devices|length }}</span>
+        </div>
+        
+        {% if devices %}
+        {% for device in devices %}
+        <div class="device-card">
+            <div class="device-icon" style="background: {% if device.is_online %}var(--secondary-color){% else %}var(--text-light){% endif %};">
+                {% if device.is_online %}✓{% else %}✕{% endif %}
+            </div>
+            <div class="device-info">
+                <div class="device-name">{{ device.device_name }}</div>
+                <div class="device-status">
+                    <span class="status-indicator {% if device.is_online %}status-online{% else %}status-offline{% endif %}"></span>
+                    {% if device.is_online %}
+                    Online • {{ device.ip_address or 'No IP' }}
+                    {% else %}
+                    Offline • Last seen {{ device.last_seen.strftime('%b %d, %I:%M %p') if device.last_seen else 'Never' }}
+                    {% endif %}
+                </div>
+                <div class="device-status" style="font-size: 0.75rem; margin-top: 0.25rem;">
+                    ID: {{ device.device_id }}
+                </div>
+            </div>
+            <div class="flex flex-col gap-1">
+                {% if device.is_online %}
+                <button class="btn btn-success btn-sm" onclick="testDevice('{{ device.device_id }}')">
+                    Test
+                </button>
+                {% endif %}
+                <button class="btn btn-danger btn-sm" onclick="removeDevice('{{ device.device_id }}')">
+                    Remove
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📱</div>
+            <p class="empty-text">No devices registered</p>
+            <p style="color: var(--text-secondary); font-size: 0.875rem;">Register your ESP32 device above</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Device Setup Instructions -->
+    <div class="card">
+        <h2 class="card-title mb-2">ESP32 Setup Instructions</h2>
+        <ol style="padding-left: 1.25rem; line-height: 1.8;">
+            <li>Flash your ESP32 with the MediTrack firmware</li>
+            <li>Connect ESP32 to WiFi</li>
+            <li>Note the Device ID from serial monitor</li>
+            <li>Register device using the form above</li>
+            <li>Device will auto-connect and appear online</li>
+        </ol>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('deviceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const deviceId = document.getElementById('device_id').value;
+    const deviceName = document.getElementById('device_name').value;
+    const ipAddress = document.getElementById('ip_address').value;
+    
+    try {
+        const response = await fetch('/api/device/register', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                device_id: deviceId,
+                device_name: deviceName,
+                ip_address: ipAddress || null
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Device registered successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Registration failed'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+});
+
+async function testDevice(deviceId) {
+    try {
+        const response = await fetch(`/api/device/${deviceId}/notify`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                medicine_name: 'Test Notification',
+                dosage: 'Test',
+                instructions: 'This is a test notification from MediTrack'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('✅ Test notification sent successfully!');
+        } else {
+            alert('❌ ' + (data.error || 'Test failed'));
+        }
+    } catch (error) {
+        alert('❌ Error: ' + error.message);
+    }
+}
+
+function removeDevice(deviceId) {
+    if (confirm('Are you sure you want to remove this device?')) {
+        alert('Remove functionality to be implemented');
+    }
+}
+</script>
+{% endblock %}

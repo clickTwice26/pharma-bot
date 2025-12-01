@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Register - MediTrack</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+</head>
+<body style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);">
+    <div class="app-container" style="display: flex; flex-direction: column; justify-content: center; min-height: 100vh; padding: 2rem;">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div style="text-align: center; margin-bottom: 2rem; color: white;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">💊</div>
+            <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">MediTrack</h1>
+            <p style="opacity: 0.9;">Your Smart Medication Assistant</p>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title text-center mb-2">Create Account</h2>
+            <p class="text-center text-secondary mb-3">Register to get started</p>
+
+            <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary-color); padding: 1rem; margin-bottom: 1.5rem; border-radius: 8px;">
+                <p style="margin: 0; color: var(--primary-color); font-size: 0.9rem;">
+                    💡 Simply choose a unique username to create your account
+                </p>
+            </div>
+
+            <form method="POST" action="{{ url_for('main.register') }}">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" name="username" required 
+                           placeholder="Choose a username" class="form-control" autofocus
+                           minlength="3" maxlength="80">
+                    <small style="color: var(--text-secondary); font-size: 0.875rem;">Minimum 3 characters</small>
+                </div>
+                
+                <button type="submit" class="btn btn-success btn-block">Create Account</button>
+            </form>
+
+            <div style="text-align: center; margin-top: 1.5rem; color: var(--text-secondary);">
+                Already have an account? 
+                <a href="{{ url_for('main.login') }}" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">Login here</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+</body>
+</html>

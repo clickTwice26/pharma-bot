@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>{% block title %}MediTrack{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="app-container">
+        {% block content %}{% endblock %}
+        
+        {% if current_user %}
+        <nav class="bottom-nav">
+            <a href="{{ url_for('main.index') }}" class="nav-item {% if request.endpoint == 'main.index' %}active{% endif %}">
+                <span class="nav-icon">🏠</span>
+                <span>Home</span>
+            </a>
+            <a href="{{ url_for('main.prescriptions') }}" class="nav-item {% if 'prescription' in request.endpoint %}active{% endif %}">
+                <span class="nav-icon">📋</span>
+                <span>Prescriptions</span>
+            </a>
+            <a href="{{ url_for('main.schedules') }}" class="nav-item {% if 'schedule' in request.endpoint %}active{% endif %}">
+                <span class="nav-icon">⏰</span>
+                <span>Schedule</span>
+            </a>
+            <a href="{{ url_for('main.devices') }}" class="nav-item {% if 'device' in request.endpoint %}active{% endif %}">
+                <span class="nav-icon">📱</span>
+                <span>Devices</span>
+            </a>
+            <a href="{{ url_for('main.profile') }}" class="nav-item {% if 'profile' in request.endpoint %}active{% endif %}">
+                <span class="nav-icon">👤</span>
+                <span>Profile</span>
+            </a>
+        </nav>
+        {% endif %}
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-messages">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
