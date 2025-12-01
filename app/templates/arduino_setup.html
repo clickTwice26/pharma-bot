@@ -1,0 +1,166 @@
+{% extends "mobile_base.html" %}
+
+{% block title %}Arduino Setup - PharmaBot{% endblock %}
+
+{% block content %}
+<header class="app-header">
+    <h1><i class="fas fa-microchip"></i> Arduino Dispenser</h1>
+    <p>Setup your medication dispenser</p>
+</header>
+
+<div class="app-content">
+    <!-- Connection Info -->
+    <div class="card">
+        <h2 class="card-title mb-2"><i class="fas fa-info-circle"></i> Device Information</h2>
+        <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+            <div style="margin-bottom: 0.75rem;">
+                <strong>Your Username:</strong>
+                <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">{{ current_user.username }}</code>
+            </div>
+            <div style="margin-bottom: 0.75rem;">
+                <strong>Server URL:</strong>
+                <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">http://pharmabot.shagato.me</code>
+            </div>
+            <div>
+                <strong>API Endpoint:</strong>
+                <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px; margin-left: 0.5rem;">/api/device/schedules?username={{ current_user.username }}</code>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Start Guide -->
+    <div class="card">
+        <h2 class="card-title mb-2"><i class="fas fa-rocket"></i> Quick Start Guide</h2>
+        
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">
+                <span style="background: var(--primary-color); color: white; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 0.5rem;">1</span>
+                Download Arduino Code
+            </h3>
+            <p style="color: var(--text-secondary); margin-bottom: 0.75rem; margin-left: 2rem;">
+                Get the medication dispenser code for your ESP32/Arduino
+            </p>
+            <a href="/arduino/download" class="btn btn-primary" style="margin-left: 2rem;">
+                <i class="fas fa-download"></i> Download Code
+            </a>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">
+                <span style="background: var(--primary-color); color: white; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 0.5rem;">2</span>
+                Configure Settings
+            </h3>
+            <p style="color: var(--text-secondary); margin-bottom: 0.75rem; margin-left: 2rem;">
+                Edit these values in the Arduino code:
+            </p>
+            <div style="background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.875rem; margin-left: 2rem; overflow-x: auto;">
+                <div>const char* WIFI_SSID = "<span style="color: #ce9178;">YourWiFiName</span>";</div>
+                <div>const char* WIFI_PASSWORD = "<span style="color: #ce9178;">YourPassword</span>";</div>
+                <div>const char* SERVER_URL = "<span style="color: #ce9178;">http://pharmabot.shagato.me</span>";</div>
+                <div>const char* USERNAME = "<span style="color: #ce9178;">{{ current_user.username }}</span>";</div>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">
+                <span style="background: var(--primary-color); color: white; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 0.5rem;">3</span>
+                Assign Compartments
+            </h3>
+            <p style="color: var(--text-secondary); margin-bottom: 0.75rem; margin-left: 2rem;">
+                Map each medicine to a servo motor slot (0-5)
+            </p>
+            <a href="/prescriptions" class="btn btn-secondary" style="margin-left: 2rem;">
+                <i class="fas fa-cog"></i> Configure Compartments
+            </a>
+        </div>
+
+        <div>
+            <h3 style="font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem;">
+                <span style="background: var(--primary-color); color: white; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; margin-right: 0.5rem;">4</span>
+                Upload & Test
+            </h3>
+            <p style="color: var(--text-secondary); margin-left: 2rem;">
+                Upload code to ESP32 and monitor Serial output for status
+            </p>
+        </div>
+    </div>
+
+    <!-- Hardware Requirements -->
+    <div class="card">
+        <h2 class="card-title mb-2"><i class="fas fa-tools"></i> Hardware Requirements</h2>
+        <ul style="list-style: none; padding: 0;">
+            <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); display: flex; align-items: center;">
+                <i class="fas fa-check-circle" style="color: var(--secondary-color); margin-right: 0.75rem;"></i>
+                ESP32 Development Board
+            </li>
+            <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); display: flex; align-items: center;">
+                <i class="fas fa-check-circle" style="color: var(--secondary-color); margin-right: 0.75rem;"></i>
+                DS3231 RTC Module
+            </li>
+            <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); display: flex; align-items: center;">
+                <i class="fas fa-check-circle" style="color: var(--secondary-color); margin-right: 0.75rem;"></i>
+                6x SG90 Servo Motors
+            </li>
+            <li style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); display: flex; align-items: center;">
+                <i class="fas fa-check-circle" style="color: var(--secondary-color); margin-right: 0.75rem;"></i>
+                Buzzer & LEDs
+            </li>
+            <li style="padding: 0.5rem 0; display: flex; align-items: center;">
+                <i class="fas fa-check-circle" style="color: var(--secondary-color); margin-right: 0.75rem;"></i>
+                5V 2A Power Supply
+            </li>
+        </ul>
+        <a href="/arduino/setup-guide" class="btn btn-secondary btn-block" style="margin-top: 1rem;">
+            <i class="fas fa-book"></i> View Full Setup Guide
+        </a>
+    </div>
+
+    <!-- Test API -->
+    <div class="card">
+        <h2 class="card-title mb-2"><i class="fas fa-vial"></i> Test API Connection</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+            Test if your Arduino can fetch schedules from the server
+        </p>
+        <button class="btn btn-primary btn-block" onclick="testAPI()">
+            <i class="fas fa-play"></i> Test Connection
+        </button>
+        <div id="testResult" style="margin-top: 1rem; display: none;"></div>
+    </div>
+</div>
+
+<script>
+async function testAPI() {
+    const resultDiv = document.getElementById('testResult');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div style="text-align: center;"><i class="fas fa-spinner fa-spin"></i> Testing...</div>';
+    
+    try {
+        const response = await fetch('/api/device/schedules?username={{ current_user.username }}');
+        const data = await response.json();
+        
+        if (response.ok) {
+            resultDiv.innerHTML = `
+                <div style="background: var(--secondary-color); color: white; padding: 1rem; border-radius: 8px;">
+                    <i class="fas fa-check-circle"></i> <strong>Connection Successful!</strong><br>
+                    <small>Found ${data.count} upcoming schedules</small>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div style="background: var(--danger-color); color: white; padding: 1rem; border-radius: 8px;">
+                    <i class="fas fa-times-circle"></i> <strong>Connection Failed</strong><br>
+                    <small>${data.error || 'Unknown error'}</small>
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div style="background: var(--danger-color); color: white; padding: 1rem; border-radius: 8px;">
+                <i class="fas fa-times-circle"></i> <strong>Connection Error</strong><br>
+                <small>${error.message}</small>
+            </div>
+        `;
+    }
+}
+</script>
+{% endblock %}

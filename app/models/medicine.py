@@ -14,6 +14,7 @@ class Medicine(db.Model):
     duration = db.Column(db.String(100), nullable=True)  # e.g., "7 days", "2 weeks"
     instructions = db.Column(db.Text, nullable=True)  # e.g., "Take after meals"
     timing = db.Column(db.String(200), nullable=True)  # e.g., "morning, evening"
+    compartment_number = db.Column(db.Integer, default=0)  # Servo motor index (0-5) for Arduino
     created_at = db.Column(db.DateTime, default=tz_now)
     is_active = db.Column(db.Boolean, default=True)
     
@@ -33,5 +34,6 @@ class Medicine(db.Model):
             'duration': self.duration,
             'instructions': self.instructions,
             'timing': self.timing,
+            'compartment_number': self.compartment_number,
             'is_active': self.is_active
         }

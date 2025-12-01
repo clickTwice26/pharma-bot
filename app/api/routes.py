@@ -138,15 +138,25 @@ def upload_prescription():
         return jsonify({'error': str(e)}), 500
 
 
-def create_schedules_for_medicine(medicine, user_id, parser):
-    """Create medication schedules based on frequency"""
+def create_schedules_for_medicine(medicine, user_id, parser, start_date=None):
+    """Create medication schedules based on frequency and prescription date"""
     times = parser.extract_timing_from_frequency(medicine.frequency)
     
     # Parse duration to get number of days
     duration_days = parse_duration(medicine.duration) if medicine.duration else 7
     
-    # Create schedules for the duration
-    start_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # Use prescription date if available, otherwise use today
+    if start_date is None:
+        # Get prescription date from medicine's prescription
+        prescription = Prescription.query.get(medicine.prescription_id)
+        if prescription and prescription.prescription_date:
+            start_date = tz_today_start().replace(
+                year=prescription.prescription_date.year,
+                month=prescription.prescription_date.month,
+                day=prescription.prescription_date.day
+            )
+        else:
+            start_date = tz_today_start()
     
     for day in range(duration_days):
         schedule_date = start_date + timedelta(days=day)
@@ -213,6 +223,145 @@ def mark_skipped(schedule_id):
     db.session.commit()
     
     return jsonify({'success': True, 'schedule': schedule.to_dict()}), 200
+
+
+@api_bp.route('/medicine/<int:medicine_id>/schedules', methods=['GET'])
+@login_required_api
+def get_medicine_schedules(medicine_id):
+    """Get all schedules for a specific medicine"""
+    user_id = session['user_id']
+    
+    # Verify medicine belongs to user
+    medicine = Medicine.query.join(Prescription).filter(
+        Medicine.id == medicine_id,
+        Prescription.user_id == user_id
+    ).first()
+    
+    if not medicine:
+        return jsonify({'error': 'Medicine not found'}), 404
+    
+    schedules = Schedule.query.filter_by(
+        medicine_id=medicine_id,
+        user_id=user_id
+    ).order_by(Schedule.scheduled_time).all()
+    
+    return jsonify({
+        'success': True,
+        'medicine': medicine.to_dict(),
+        'schedules': [s.to_dict() for s in schedules]
+    }), 200
+
+
+@api_bp.route('/medicine/<int:medicine_id>/regenerate-schedules', methods=['POST'])
+@login_required_api
+def regenerate_schedules(medicine_id):
+    """Regenerate schedules for a medicine from a specific date"""
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    
+    # Verify medicine belongs to user
+    medicine = Medicine.query.join(Prescription).filter(
+        Medicine.id == medicine_id,
+        Prescription.user_id == user_id
+    ).first()
+    
+    if not medicine:
+        return jsonify({'error': 'Medicine not found'}), 404
+    
+    try:
+        # Get start date from request or use prescription date
+        start_date_str = data.get('start_date')
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            prescription = Prescription.query.get(medicine.prescription_id)
+            if prescription and prescription.prescription_date:
+                start_date = tz_today_start().replace(
+                    year=prescription.prescription_date.year,
+                    month=prescription.prescription_date.month,
+                    day=prescription.prescription_date.day
+                )
+            else:
+                start_date = tz_today_start()
+        
+        # Delete existing future schedules (keep historical ones)
+        Schedule.query.filter(
+            Schedule.medicine_id == medicine_id,
+            Schedule.user_id == user_id,
+            Schedule.scheduled_time >= tz_now(),
+            Schedule.taken == False
+        ).delete()
+        
+        # Create new schedules
+        parser = GeminiPrescriptionParser()
+        create_schedules_for_medicine(medicine, user_id, parser, start_date)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Schedules regenerated successfully',
+            'start_date': start_date.strftime('%Y-%m-%d')
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/schedule/<int:schedule_id>', methods=['PUT'])
+@login_required_api
+def update_schedule(schedule_id):
+    """Update a specific schedule's time"""
+    user_id = session['user_id']
+    data = request.get_json()
+    
+    schedule = Schedule.query.filter_by(id=schedule_id, user_id=user_id).first()
+    
+    if not schedule:
+        return jsonify({'error': 'Schedule not found'}), 404
+    
+    if schedule.taken:
+        return jsonify({'error': 'Cannot edit a schedule that has been taken'}), 400
+    
+    try:
+        # Update scheduled time
+        new_time_str = data.get('scheduled_time')
+        if new_time_str:
+            new_time = datetime.strptime(new_time_str, '%Y-%m-%d %H:%M')
+            schedule.scheduled_time = new_time
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'schedule': schedule.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
+
+
+@api_bp.route('/schedule/<int:schedule_id>', methods=['DELETE'])
+@login_required_api
+def delete_schedule(schedule_id):
+    """Delete a specific schedule"""
+    user_id = session['user_id']
+    
+    schedule = Schedule.query.filter_by(id=schedule_id, user_id=user_id).first()
+    
+    if not schedule:
+        return jsonify({'error': 'Schedule not found'}), 404
+    
+    if schedule.taken:
+        return jsonify({'error': 'Cannot delete a schedule that has been taken'}), 400
+    
+    db.session.delete(schedule)
+    db.session.commit()
+    
+    return jsonify({'success': True, 'message': 'Schedule deleted successfully'}), 200
 
 
 @api_bp.route('/device/register', methods=['POST'])
@@ -389,3 +538,153 @@ def dashboard_stats():
     }
     
     return jsonify(stats), 200
+
+
+# ==================== ARDUINO/ESP32 DEVICE API ENDPOINTS ====================
+
+@api_bp.route('/device/time', methods=['GET'])
+def get_server_time():
+    """Get current server timestamp for RTC synchronization"""
+    current_time = tz_now()
+    return jsonify({
+        'timestamp': int(current_time.timestamp()),
+        'datetime': current_time.strftime('%Y-%m-%d %H:%M:%S'),
+        'timezone': 'Asia/Dhaka'
+    }), 200
+
+
+@api_bp.route('/device/schedules', methods=['GET'])
+def get_device_schedules():
+    """
+    Get upcoming schedules for Arduino device
+    Query params: username (required)
+    Returns schedules for the next 7 days with medicine compartment mapping
+    """
+    username = request.args.get('username')
+    
+    if not username:
+        return jsonify({'error': 'Username is required'}), 400
+    
+    # Find user by username
+    user = User.query.filter_by(username=username).first()
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Get schedules for next 7 days
+    now = tz_now()
+    future_date = now + timedelta(days=7)
+    
+    schedules = Schedule.query.filter(
+        Schedule.user_id == user.id,
+        Schedule.scheduled_time >= now,
+        Schedule.scheduled_time <= future_date,
+        Schedule.taken == False
+    ).order_by(Schedule.scheduled_time).all()
+    
+    # Format schedules for Arduino
+    schedules_data = []
+    for schedule in schedules:
+        medicine = schedule.medicine
+        schedules_data.append({
+            'id': schedule.id,
+            'medicine_id': medicine.id,
+            'medicine_name': medicine.name,
+            'dosage': medicine.dosage,
+            'instructions': medicine.instructions or '',
+            'compartment_number': medicine.compartment_number,
+            'scheduled_time': schedule.scheduled_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'scheduled_timestamp': int(schedule.scheduled_time.timestamp()),
+            'taken': schedule.taken,
+            'skipped': schedule.skipped
+        })
+    
+    return jsonify({
+        'success': True,
+        'username': username,
+        'schedules': schedules_data,
+        'count': len(schedules_data),
+        'server_time': now.strftime('%Y-%m-%d %H:%M:%S')
+    }), 200
+
+
+@api_bp.route('/device/medicine/update-compartment', methods=['POST'])
+def update_medicine_compartment():
+    """
+    Update compartment number for a medicine
+    Used to assign servo motors to medicines
+    """
+    data = request.get_json()
+    
+    medicine_id = data.get('medicine_id')
+    compartment_number = data.get('compartment_number')
+    username = data.get('username')
+    
+    if not all([medicine_id, compartment_number is not None, username]):
+        return jsonify({'error': 'medicine_id, compartment_number, and username are required'}), 400
+    
+    # Verify user
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Get medicine and verify ownership
+    medicine = Medicine.query.join(Prescription).filter(
+        Medicine.id == medicine_id,
+        Prescription.user_id == user.id
+    ).first()
+    
+    if not medicine:
+        return jsonify({'error': 'Medicine not found'}), 404
+    
+    # Update compartment number
+    medicine.compartment_number = compartment_number
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'medicine': medicine.to_dict()
+    }), 200
+
+
+@api_bp.route('/device/heartbeat', methods=['POST'])
+def device_heartbeat():
+    """
+    Arduino device heartbeat to update last seen timestamp
+    """
+    data = request.get_json()
+    
+    device_id = data.get('device_id')
+    username = data.get('username')
+    
+    if not device_id or not username:
+        return jsonify({'error': 'device_id and username are required'}), 400
+    
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    # Update or create device
+    device = IoTDevice.query.filter_by(device_id=device_id, user_id=user.id).first()
+    
+    if device:
+        device.last_seen = tz_now()
+        device.is_online = True
+    else:
+        device = IoTDevice(
+            user_id=user.id,
+            device_id=device_id,
+            device_name=data.get('device_name', 'Arduino Dispenser'),
+            device_type='Arduino',
+            is_online=True,
+            last_seen=tz_now()
+        )
+        db.session.add(device)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Heartbeat received',
+        'server_time': tz_now().strftime('%Y-%m-%d %H:%M:%S')
+    }), 200

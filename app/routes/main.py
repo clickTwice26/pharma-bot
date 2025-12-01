@@ -252,6 +252,110 @@ def profile():
     )
 
 
+@main_bp.route('/arduino')
+@login_required
+def arduino_setup():
+    """Arduino setup page"""
+    current_user = get_current_user()
+    return render_template('arduino_setup.html', current_user=current_user)
+
+
+@main_bp.route('/arduino/download')
+@login_required
+def arduino_download():
+    """Download Arduino code with pre-configured username"""
+    from flask import send_file, make_response
+    import io
+    
+    current_user = get_current_user()
+    
+    # Read the Arduino code template
+    arduino_file = 'arduino/medication_dispenser.ino'
+    try:
+        with open(arduino_file, 'r') as f:
+            code = f.read()
+        
+        # Replace placeholder username with actual username
+        code = code.replace('const char* USERNAME = "user1";', 
+                          f'const char* USERNAME = "{current_user.username}";')
+        
+        # Create response
+        output = io.BytesIO()
+        output.write(code.encode('utf-8'))
+        output.seek(0)
+        
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/plain'
+        response.headers['Content-Disposition'] = f'attachment; filename=medication_dispenser_{current_user.username}.ino'
+        
+        return response
+    except FileNotFoundError:
+        flash('Arduino code file not found. Please contact administrator.', 'error')
+        return redirect(url_for('main.arduino_setup'))
+
+
+@main_bp.route('/arduino/setup-guide')
+@login_required
+def arduino_guide():
+    """Show Arduino setup guide"""
+    import re
+    from markupsafe import Markup
+    
+    current_user = get_current_user()
+    
+    # Read README content
+    readme_file = 'arduino/README.md'
+    try:
+        with open(readme_file, 'r') as f:
+            markdown_text = f.read()
+        
+        # Simple markdown to HTML conversion
+        html = markdown_text
+        
+        # Convert code blocks first
+        html = re.sub(r'```(.*?)```', r'<pre><code>\1</code></pre>', html, flags=re.DOTALL)
+        
+        # Convert headers
+        html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
+        html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
+        html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
+        
+        # Convert bold and italic
+        html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
+        html = re.sub(r'\*(.+?)\*', r'<em>\1</em>', html)
+        
+        # Convert inline code
+        html = re.sub(r'`([^`]+)`', r'<code>\1</code>', html)
+        
+        # Convert unordered lists
+        html = re.sub(r'^\- (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
+        html = re.sub(r'(<li>.*?</li>\n?)+', r'<ul>\g<0></ul>', html, flags=re.DOTALL)
+        
+        # Convert ordered lists
+        html = re.sub(r'^\d+\. (.+)$', r'<li>\1</li>', html, flags=re.MULTILINE)
+        
+        # Convert line breaks to paragraphs
+        html = re.sub(r'\n\n', r'</p><p>', html)
+        html = '<p>' + html + '</p>'
+        
+        # Clean up empty paragraphs
+        html = re.sub(r'<p>\s*</p>', '', html)
+        html = re.sub(r'<p>(<h[123]>)', r'\1', html)
+        html = re.sub(r'(</h[123]>)</p>', r'\1', html)
+        html = re.sub(r'<p>(<ul>)', r'\1', html)
+        html = re.sub(r'(</ul>)</p>', r'\1', html)
+        html = re.sub(r'<p>(<pre>)', r'\1', html)
+        html = re.sub(r'(</pre>)</p>', r'\1', html)
+        
+        readme_content = Markup(html)
+    except FileNotFoundError:
+        readme_content = Markup("<p>Setup guide not available.</p>")
+    
+    return render_template('arduino_guide.html', 
+                         current_user=current_user,
+                         readme_content=readme_content)
+
+
 @main_bp.route('/health')
 def health_check():
     """Health check endpoint for monitoring"""

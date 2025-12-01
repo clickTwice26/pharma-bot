@@ -82,26 +82,167 @@
             <div style="flex: 1;">
                 <div class="schedule-medicine">{{ medicine.name }}</div>
                 <div class="schedule-dosage">
-                    💊 {{ medicine.dosage }} • {{ medicine.frequency }}
+                    <i class="fas fa-pills"></i> {{ medicine.dosage }} • {{ medicine.frequency }}
                 </div>
                 {% if medicine.duration %}
                 <div class="schedule-dosage">
-                    ⏱️ Duration: {{ medicine.duration }}
+                    <i class="fas fa-clock"></i> Duration: {{ medicine.duration }}
                 </div>
                 {% endif %}
                 {% if medicine.timing %}
                 <div class="schedule-dosage">
-                    🕐 Timing: {{ medicine.timing }}
+                    <i class="fas fa-calendar-check"></i> Timing: {{ medicine.timing }}
                 </div>
                 {% endif %}
                 {% if medicine.instructions %}
                 <div class="schedule-dosage" style="margin-top: 0.5rem; padding: 0.5rem; background: var(--bg-secondary); border-radius: 6px;">
-                    📝 {{ medicine.instructions }}
+                    <i class="fas fa-info-circle"></i> {{ medicine.instructions }}
                 </div>
                 {% endif %}
+                <div class="schedule-dosage" style="margin-top: 0.5rem;">
+                    <i class="fas fa-microchip"></i> Arduino Compartment: 
+                    <span class="badge badge-info">Slot {{ medicine.compartment_number }}</span>
+                    <button class="btn btn-sm btn-secondary" onclick="setCompartment({{ medicine.id }}, {{ medicine.compartment_number }}, '{{ medicine.name }}')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </div>
+                <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button class="btn btn-sm btn-secondary" onclick="viewSchedules({{ medicine.id }}, '{{ medicine.name }}')">
+                        <i class="fas fa-calendar-alt"></i> View Schedule
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="regenerateSchedules({{ medicine.id }}, '{{ medicine.name }}')">
+                        <i class="fas fa-sync-alt"></i> Regenerate
+                    </button>
+                </div>
             </div>
         </div>
         {% endfor %}
+    </div>
+
+    <!-- Schedule Management Modal -->
+    <div id="scheduleModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto;">
+        <div style="max-width: 640px; margin: 2rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 id="modalTitle" style="margin: 0;">Medicine Schedule</h2>
+                <button onclick="closeModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">×</button>
+            </div>
+            <div id="scheduleList"></div>
+        </div>
+    </div>
+
+    <!-- Edit Schedule Modal -->
+    <div id="editScheduleModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001;">
+        <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <h2 style="margin-bottom: 1rem;">Edit Schedule</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">Choose new date and time for this dose:</p>
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Date</label>
+                <input type="date" id="editDateInput" 
+                       style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); margin-bottom: 0.75rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Time</label>
+                <input type="time" id="editTimeInput" 
+                       style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" onclick="confirmEditSchedule()">
+                    <i class="fas fa-save"></i> Save
+                </button>
+                <button class="btn btn-secondary" onclick="closeEditScheduleModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Schedule Confirmation Modal -->
+    <div id="deleteScheduleModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001;">
+        <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <h2 style="margin-bottom: 1rem; color: var(--danger-color);">
+                <i class="fas fa-exclamation-triangle"></i> Delete Schedule
+            </h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Are you sure you want to delete this scheduled dose?</p>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-danger" onclick="confirmDeleteSchedule()">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <button class="btn btn-secondary" onclick="closeDeleteScheduleModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Regenerate Modal -->
+    <div id="regenerateModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <h2 style="margin-bottom: 1rem;">Regenerate Schedules</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">Choose a start date to regenerate medication schedules. This will replace all pending future schedules.</p>
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Start Date</label>
+                <input type="date" id="startDateInput" value="{{ prescription.prescription_date.strftime('%Y-%m-%d') if prescription.prescription_date else '' }}" 
+                       style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" onclick="confirmRegenerate()">
+                    <i class="fas fa-sync-alt"></i> Regenerate
+                </button>
+                <button class="btn btn-secondary" onclick="closeRegenerateModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Set Compartment Modal -->
+    <div id="setCompartmentModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001;">
+        <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <h2 style="margin-bottom: 1rem;">
+                <i class="fas fa-microchip"></i> Set Arduino Compartment
+            </h2>
+            <p id="compartmentMedicineName" style="color: var(--text-secondary); margin-bottom: 1rem; font-weight: 600;"></p>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
+                Assign this medicine to a servo motor compartment (0-5) on your Arduino dispenser:
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.5rem;">
+                <button class="btn btn-secondary" onclick="selectCompartment(0)" style="padding: 1rem;">
+                    <i class="fas fa-box"></i><br>Slot 0
+                </button>
+                <button class="btn btn-secondary" onclick="selectCompartment(1)" style="padding: 1rem;">
+                    <i class="fas fa-box"></i><br>Slot 1
+                </button>
+                <button class="btn btn-secondary" onclick="selectCompartment(2)" style="padding: 1rem;">
+                    <i class="fas fa-box"></i><br>Slot 2
+                </button>
+                <button class="btn btn-secondary" onclick="selectCompartment(3)" style="padding: 1rem;">
+                    <i class="fas fa-box"></i><br>Slot 3
+                </button>
+                <button class="btn btn-secondary" onclick="selectCompartment(4)" style="padding: 1rem;">
+                    <i class="fas fa-box"></i><br>Slot 4
+                </button>
+                <button class="btn btn-secondary" onclick="selectCompartment(5)" style="padding: 1rem;">
+                    <i class="fas fa-box"></i><br>Slot 5
+                </button>
+            </div>
+            <button class="btn btn-secondary btn-block" onclick="closeSetCompartmentModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Delete Prescription Confirmation Modal -->
+    <div id="deletePrescriptionModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <h2 style="margin-bottom: 1rem; color: var(--danger-color);">
+                <i class="fas fa-exclamation-triangle"></i> Delete Prescription
+            </h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Are you sure you want to delete this prescription? This will also delete all associated medicines and schedules. This action cannot be undone.</p>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-danger" onclick="confirmDeletePrescription()">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <button class="btn btn-secondary" onclick="closeDeletePrescriptionModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Toast -->
+    <div id="toast" style="display: none; position: fixed; top: 5rem; left: 50%; transform: translateX(-50%); z-index: 2000; min-width: 300px; max-width: 500px;">
+        <div id="toastContent" style="padding: 1rem 1.5rem; border-radius: 8px; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: 0.75rem;">
+            <i id="toastIcon"></i>
+            <span id="toastMessage"></span>
+        </div>
     </div>
 
     <!-- Actions -->
@@ -116,10 +257,42 @@
 
 {% block extra_js %}
 <script>
-async function deletePrescription() {
-    if (!confirm('Are you sure you want to delete this prescription? This will also delete all associated medicines and schedules.')) {
-        return;
+let currentMedicineId = null;
+let currentScheduleId = null;
+let currentCompartmentMedicineId = null;
+
+// Toast notification system
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    const toastContent = document.getElementById('toastContent');
+    const toastIcon = document.getElementById('toastIcon');
+    const toastMessage = document.getElementById('toastMessage');
+    
+    toastIcon.className = type === 'success' ? 'fas fa-check-circle' : 'fas fa-exclamation-circle';
+    toastMessage.textContent = message;
+    
+    if (type === 'success') {
+        toastContent.style.background = 'var(--secondary-color)';
+        toastContent.style.color = 'white';
+    } else {
+        toastContent.style.background = 'var(--danger-color)';
+        toastContent.style.color = 'white';
     }
+    
+    toast.style.display = 'block';
+    
+    setTimeout(() => {
+        toast.style.display = 'none';
+    }, 3000);
+}
+
+function deletePrescription() {
+    document.getElementById('deletePrescriptionModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+async function confirmDeletePrescription() {
+    closeDeletePrescriptionModal();
     
     try {
         const response = await fetch('/api/prescription/{{ prescription.id }}', {
@@ -132,15 +305,325 @@ async function deletePrescription() {
         const data = await response.json();
         
         if (response.ok) {
-            alert('Prescription deleted successfully');
-            window.location.href = '/prescriptions';
+            showToast('Prescription deleted successfully', 'success');
+            setTimeout(() => {
+                window.location.href = '/prescriptions';
+            }, 1000);
         } else {
-            alert(data.message || 'Failed to delete prescription');
+            showToast(data.message || 'Failed to delete prescription', 'error');
         }
     } catch (error) {
         console.error('Error:', error);
-        alert('An error occurred while deleting the prescription');
+        showToast('An error occurred while deleting the prescription', 'error');
     }
 }
+
+function closeDeletePrescriptionModal() {
+    document.getElementById('deletePrescriptionModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+// Compartment management functions
+function setCompartment(medicineId, currentCompartment, medicineName) {
+    currentCompartmentMedicineId = medicineId;
+    document.getElementById('compartmentMedicineName').textContent = medicineName;
+    document.getElementById('setCompartmentModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+async function selectCompartment(compartmentNumber) {
+    closeSetCompartmentModal();
+    showToast('Updating compartment assignment...', 'success');
+    
+    try {
+        const response = await fetch('/api/device/medicine/update-compartment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                medicine_id: currentCompartmentMedicineId,
+                compartment_number: compartmentNumber,
+                username: '{{ current_user.username }}'
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast(`Assigned to Slot ${compartmentNumber} successfully`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast(data.error || 'Failed to update compartment', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error updating compartment', 'error');
+    }
+}
+
+function closeSetCompartmentModal() {
+    document.getElementById('setCompartmentModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    currentCompartmentMedicineId = null;
+}
+
+async function viewSchedules(medicineId, medicineName) {
+    currentMedicineId = medicineId;
+    document.getElementById('modalTitle').textContent = `${medicineName} - Schedule`;
+    document.getElementById('scheduleModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    
+    document.getElementById('scheduleList').innerHTML = '<div style="text-align: center; padding: 2rem;"><i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary-color);"></i></div>';
+    
+    try {
+        const response = await fetch(`/api/medicine/${medicineId}/schedules`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            displaySchedules(data.schedules);
+        } else {
+            document.getElementById('scheduleList').innerHTML = '<p style="color: var(--danger-color); text-align: center;">Failed to load schedules</p>';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('scheduleList').innerHTML = '<p style="color: var(--danger-color); text-align: center;">Error loading schedules</p>';
+    }
+}
+
+function displaySchedules(schedules) {
+    const scheduleList = document.getElementById('scheduleList');
+    
+    if (schedules.length === 0) {
+        scheduleList.innerHTML = '<p style="color: var(--text-secondary);">No schedules found</p>';
+        return;
+    }
+    
+    let html = '<div style="max-height: 60vh; overflow-y: auto;">';
+    
+    schedules.forEach(schedule => {
+        const scheduleDate = new Date(schedule.scheduled_time);
+        const dateStr = scheduleDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const timeStr = scheduleDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        
+        let statusBadge = '';
+        if (schedule.taken) {
+            statusBadge = '<span class="badge badge-success">Taken</span>';
+        } else if (schedule.skipped) {
+            statusBadge = '<span class="badge badge-secondary">Skipped</span>';
+        } else {
+            statusBadge = '<span class="badge badge-info">Pending</span>';
+        }
+        
+        const canEdit = !schedule.taken && !schedule.skipped;
+        
+        html += `
+            <div style="padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">${dateStr} at ${timeStr}</div>
+                    <div>${statusBadge}</div>
+                </div>
+                ${canEdit ? `
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-sm btn-secondary" onclick="editSchedule(${schedule.id}, '${schedule.scheduled_time}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteSchedule(${schedule.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    scheduleList.innerHTML = html;
+}
+
+function editSchedule(scheduleId, currentTime) {
+    currentScheduleId = scheduleId;
+    
+    // Parse the ISO datetime string
+    const dateTime = new Date(currentTime);
+    const dateStr = dateTime.toISOString().split('T')[0];
+    const timeStr = dateTime.toTimeString().substring(0, 5);
+    
+    document.getElementById('editDateInput').value = dateStr;
+    document.getElementById('editTimeInput').value = timeStr;
+    document.getElementById('editScheduleModal').style.display = 'block';
+}
+
+async function confirmEditSchedule() {
+    const date = document.getElementById('editDateInput').value;
+    const time = document.getElementById('editTimeInput').value;
+    
+    if (!date || !time) {
+        showToast('Please select both date and time', 'error');
+        return;
+    }
+    
+    const newTime = `${date} ${time}`;
+    closeEditScheduleModal();
+    
+    try {
+        const response = await fetch(`/api/schedule/${currentScheduleId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                scheduled_time: newTime
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast('Schedule updated successfully', 'success');
+            viewSchedules(currentMedicineId, ''); // Reload
+        } else {
+            showToast(data.error || 'Failed to update schedule', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error updating schedule', 'error');
+    }
+}
+
+function closeEditScheduleModal() {
+    document.getElementById('editScheduleModal').style.display = 'none';
+    currentScheduleId = null;
+}
+
+function deleteSchedule(scheduleId) {
+    currentScheduleId = scheduleId;
+    document.getElementById('deleteScheduleModal').style.display = 'block';
+}
+
+async function confirmDeleteSchedule() {
+    closeDeleteScheduleModal();
+    
+    try {
+        const response = await fetch(`/api/schedule/${currentScheduleId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast('Schedule deleted successfully', 'success');
+            viewSchedules(currentMedicineId, ''); // Reload
+        } else {
+            showToast(data.error || 'Failed to delete schedule', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error deleting schedule', 'error');
+    }
+}
+
+function closeDeleteScheduleModal() {
+    document.getElementById('deleteScheduleModal').style.display = 'none';
+    currentScheduleId = null;
+}
+
+function closeModal() {
+    document.getElementById('scheduleModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+function regenerateSchedules(medicineId, medicineName) {
+    currentMedicineId = medicineId;
+    document.getElementById('regenerateModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+async function confirmRegenerate() {
+    const startDate = document.getElementById('startDateInput').value;
+    
+    if (!startDate) {
+        showToast('Please select a start date', 'error');
+        return;
+    }
+    
+    closeRegenerateModal();
+    showToast('Regenerating schedules...', 'success');
+    
+    try {
+        const response = await fetch(`/api/medicine/${currentMedicineId}/regenerate-schedules`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                start_date: startDate
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast('Schedules regenerated successfully', 'success');
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showToast(data.error || 'Failed to regenerate schedules', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error regenerating schedules', 'error');
+    }
+}
+
+function closeRegenerateModal() {
+    document.getElementById('regenerateModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+// Close modal on outside click
+window.onclick = function(event) {
+    const scheduleModal = document.getElementById('scheduleModal');
+    const regenerateModal = document.getElementById('regenerateModal');
+    const editScheduleModal = document.getElementById('editScheduleModal');
+    const deleteScheduleModal = document.getElementById('deleteScheduleModal');
+    const deletePrescriptionModal = document.getElementById('deletePrescriptionModal');
+    const setCompartmentModal = document.getElementById('setCompartmentModal');
+    
+    if (event.target === scheduleModal) {
+        closeModal();
+    }
+    if (event.target === regenerateModal) {
+        closeRegenerateModal();
+    }
+    if (event.target === editScheduleModal) {
+        closeEditScheduleModal();
+    }
+    if (event.target === deleteScheduleModal) {
+        closeDeleteScheduleModal();
+    }
+    if (event.target === deletePrescriptionModal) {
+        closeDeletePrescriptionModal();
+    }
+    if (event.target === setCompartmentModal) {
+        closeSetCompartmentModal();
+    }
+}
+
+// Close modals on ESC key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeModal();
+        closeRegenerateModal();
+        closeEditScheduleModal();
+        closeDeleteScheduleModal();
+        closeDeletePrescriptionModal();
+        closeSetCompartmentModal();
+    }
+});
 </script>
 {% endblock %}

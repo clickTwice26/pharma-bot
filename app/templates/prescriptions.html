@@ -154,13 +154,61 @@ if (window.location.search.includes('upload=1')) {
     document.getElementById('fileInput').click();
 }
 
-async function deletePrescription(prescriptionId) {
-    if (!confirm('Are you sure you want to delete this prescription? This will also delete all associated medicines and schedules.')) {
-        return;
+let deletePrescriptionId = null;
+
+function deletePrescription(prescriptionId) {
+    deletePrescriptionId = prescriptionId;
+    showDeleteModal();
+}
+
+function showDeleteModal() {
+    const modal = document.createElement('div');
+    modal.id = 'deleteModal';
+    modal.style.cssText = 'display: block; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;';
+    
+    modal.innerHTML = `
+        <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <h2 style="margin-bottom: 1rem; color: var(--danger-color);">
+                <i class="fas fa-exclamation-triangle"></i> Delete Prescription
+            </h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
+                Are you sure you want to delete this prescription? This will also delete all associated medicines and schedules. This action cannot be undone.
+            </p>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-danger" onclick="confirmDelete()">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+    
+    // Close on outside click
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            closeDeleteModal();
+        }
+    };
+}
+
+function closeDeleteModal() {
+    const modal = document.getElementById('deleteModal');
+    if (modal) {
+        modal.remove();
+        document.body.style.overflow = 'auto';
     }
+    deletePrescriptionId = null;
+}
+
+async function confirmDelete() {
+    closeDeleteModal();
+    showToast('Deleting prescription...', 'success');
     
     try {
-        const response = await fetch(`/api/prescription/${prescriptionId}`, {
+        const response = await fetch(`/api/prescription/${deletePrescriptionId}`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json'
@@ -170,15 +218,42 @@ async function deletePrescription(prescriptionId) {
         const data = await response.json();
         
         if (response.ok) {
-            alert('Prescription deleted successfully');
-            location.reload();
+            showToast('Prescription deleted successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
         } else {
-            alert(data.message || 'Failed to delete prescription');
+            showToast(data.message || 'Failed to delete prescription', 'error');
         }
     } catch (error) {
         console.error('Error:', error);
-        alert('An error occurred while deleting the prescription');
+        showToast('An error occurred while deleting the prescription', 'error');
     }
+}
+
+function showToast(message, type = 'success') {
+    let toast = document.getElementById('toast');
+    
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.style.cssText = 'position: fixed; top: 5rem; left: 50%; transform: translateX(-50%); z-index: 2000; min-width: 300px; max-width: 500px;';
+        document.body.appendChild(toast);
+    }
+    
+    const bgColor = type === 'success' ? 'var(--secondary-color)' : 'var(--danger-color)';
+    const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    toast.innerHTML = `
+        <div style="padding: 1rem 1.5rem; border-radius: 8px; box-shadow: var(--shadow-lg); background: ${bgColor}; color: white; display: flex; align-items: center; gap: 0.75rem;">
+            <i class="fas ${icon}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    toast.style.display = 'block';
+    
+    setTimeout(() => {
+        toast.style.display = 'none';
+    }, 3000);
 }
 </script>
 {% endblock %}
