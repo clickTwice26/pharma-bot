@@ -2,53 +2,119 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Register - MediTrack</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Register - PharmaBot</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+    <style>
+        .auth-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+        }
+        .auth-container {
+            width: 100%;
+            max-width: 420px;
+        }
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .auth-logo {
+            width: 64px;
+            height: 64px;
+            background: var(--primary-color);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+        }
+        .auth-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+        .auth-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9375rem;
+        }
+        .auth-card {
+            background: var(--bg-primary);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
+        }
+        .info-box {
+            background: #eff6ff;
+            border-left: 3px solid var(--primary-color);
+            padding: 0.875rem 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: var(--radius-sm);
+        }
+        .info-box p {
+            margin: 0;
+            color: var(--primary-dark);
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+        @media (max-width: 480px) {
+            .auth-card {
+                padding: 1.5rem;
+            }
+        }
+    </style>
 </head>
-<body style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);">
-    <div class="app-container" style="display: flex; flex-direction: column; justify-content: center; min-height: 100vh; padding: 2rem;">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-        {% endwith %}
+<body>
+    <div class="auth-page">
+        <div class="auth-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
 
-        <div style="text-align: center; margin-bottom: 2rem; color: white;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">💊</div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">MediTrack</h1>
-            <p style="opacity: 0.9;">Your Smart Medication Assistant</p>
-        </div>
-
-        <div class="card">
-            <h2 class="card-title text-center mb-2">Create Account</h2>
-            <p class="text-center text-secondary mb-3">Register to get started</p>
-
-            <div style="background: rgba(99, 102, 241, 0.1); border-left: 4px solid var(--primary-color); padding: 1rem; margin-bottom: 1.5rem; border-radius: 8px;">
-                <p style="margin: 0; color: var(--primary-color); font-size: 0.9rem;">
-                    💡 Simply choose a unique username to create your account
-                </p>
+            <div class="auth-header">
+                <div class="auth-logo">PB</div>
+                <h1 class="auth-title">PharmaBot</h1>
+                <p class="auth-subtitle">Your Smart Medication Assistant</p>
             </div>
 
-            <form method="POST" action="{{ url_for('main.register') }}">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" name="username" required 
-                           placeholder="Choose a username" class="form-control" autofocus
-                           minlength="3" maxlength="80">
-                    <small style="color: var(--text-secondary); font-size: 0.875rem;">Minimum 3 characters</small>
-                </div>
-                
-                <button type="submit" class="btn btn-success btn-block">Create Account</button>
-            </form>
+            <div class="auth-card">
+                <h2 class="card-title text-center mb-2">Create Account</h2>
+                <p class="text-center text-secondary mb-3">Register to get started</p>
 
-            <div style="text-align: center; margin-top: 1.5rem; color: var(--text-secondary);">
-                Already have an account? 
-                <a href="{{ url_for('main.login') }}" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">Login here</a>
+                <div class="info-box">
+                    <p>Simply choose a unique username to create your account. No password required for quick access.</p>
+                </div>
+
+                <form method="POST" action="{{ url_for('main.register') }}">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" required 
+                               placeholder="Choose a username" class="form-control" autofocus
+                               minlength="3" maxlength="80">
+                        <small style="color: var(--text-secondary); font-size: 0.8125rem; display: block; margin-top: 0.375rem;">Minimum 3 characters</small>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+                </form>
+
+                <div style="text-align: center; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                    <span style="color: var(--text-secondary);">Already have an account?</span>
+                    <a href="{{ url_for('main.login') }}" style="color: var(--primary-color); text-decoration: none; font-weight: 600; margin-left: 0.25rem;">Login</a>
+                </div>
             </div>
         </div>
     </div>

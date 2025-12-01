@@ -2,45 +2,100 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Login - MediTrack</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>Login - PharmaBot</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+    <style>
+        .auth-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+        }
+        .auth-container {
+            width: 100%;
+            max-width: 420px;
+        }
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .auth-logo {
+            width: 64px;
+            height: 64px;
+            background: var(--primary-color);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+        }
+        .auth-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+        .auth-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9375rem;
+        }
+        .auth-card {
+            background: var(--bg-primary);
+            border-radius: var(--radius-lg);
+            padding: 2rem;
+            box-shadow: var(--shadow-lg);
+            border: 1px solid var(--border-color);
+        }
+        @media (max-width: 480px) {
+            .auth-card {
+                padding: 1.5rem;
+            }
+        }
+    </style>
 </head>
-<body style="background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);">
-    <div class="app-container" style="display: flex; flex-direction: column; justify-content: center; min-height: 100vh; padding: 2rem;">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                <div class="flash-messages">
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
+<body>
+    <div class="auth-page">
+        <div class="auth-container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-messages">
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="auth-header">
+                <div class="auth-logo">PB</div>
+                <h1 class="auth-title">PharmaBot</h1>
+                <p class="auth-subtitle">Your Smart Medication Assistant</p>
+            </div>
+
+            <div class="auth-card">
+                <h2 class="card-title text-center mb-2">Welcome Back</h2>
+                <p class="text-center text-secondary mb-3">Please login to continue</p>
+
+                <form method="POST" action="{{ url_for('main.login') }}">
+                    <div class="form-group">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" required 
+                               placeholder="Enter your username" class="form-control" autofocus>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-block">Login</button>
+                </form>
+
+                <div style="text-align: center; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+                    <span style="color: var(--text-secondary);">Don't have an account?</span>
+                    <a href="{{ url_for('main.register') }}" style="color: var(--primary-color); text-decoration: none; font-weight: 600; margin-left: 0.25rem;">Register</a>
                 </div>
-            {% endif %}
-        {% endwith %}
-
-        <div style="text-align: center; margin-bottom: 2rem; color: white;">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">💊</div>
-            <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">MediTrack</h1>
-            <p style="opacity: 0.9;">Your Smart Medication Assistant</p>
-        </div>
-
-        <div class="card">
-            <h2 class="card-title text-center mb-2">Welcome Back!</h2>
-            <p class="text-center text-secondary mb-3">Login to your account</p>
-
-            <form method="POST" action="{{ url_for('main.login') }}">
-                <div class="form-group">
-                    <label class="form-label">Username</label>
-                    <input type="text" name="username" required 
-                           placeholder="Enter your username" class="form-control" autofocus>
-                </div>
-                
-                <button type="submit" class="btn btn-primary btn-block">Login</button>
-            </form>
-
-            <div style="text-align: center; margin-top: 1.5rem; color: var(--text-secondary);">
-                Don't have an account? 
-                <a href="{{ url_for('main.register') }}" style="color: var(--primary-color); text-decoration: none; font-weight: 600;">Register here</a>
             </div>
         </div>
     </div>

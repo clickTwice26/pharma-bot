@@ -1,0 +1,29 @@
+[Unit]
+Description=MediTrack Gunicorn Application
+After=network.target
+
+[Service]
+Type=notify
+User=raju
+Group=www-data
+WorkingDirectory=/home/raju/dld_project_backend
+Environment="PATH=/home/raju/dld_project_backend/venv/bin"
+ExecStart=/home/raju/dld_project_backend/venv/bin/gunicorn \
+    --bind 0.0.0.0:7878 \
+    --workers 4 \
+    --threads 2 \
+    --timeout 120 \
+    --access-logfile /home/raju/dld_project_backend/logs/access.log \
+    --error-logfile /home/raju/dld_project_backend/logs/error.log \
+    --log-level info \
+    --preload \
+    'app:create_app()'
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

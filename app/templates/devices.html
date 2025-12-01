@@ -1,6 +1,6 @@
 {% extends "mobile_base.html" %}
 
-{% block title %}Devices - MediTrack{% endblock %}
+{% block title %}Devices - PharmaBot{% endblock %}
 
 {% block content %}
 <header class="app-header">
@@ -83,7 +83,7 @@
     <div class="card">
         <h2 class="card-title mb-2">ESP32 Setup Instructions</h2>
         <ol style="padding-left: 1.25rem; line-height: 1.8;">
-            <li>Flash your ESP32 with the MediTrack firmware</li>
+            <li>Flash your ESP32 with the PharmaBot firmware</li>
             <li>Connect ESP32 to WiFi</li>
             <li>Note the Device ID from serial monitor</li>
             <li>Register device using the form above</li>
@@ -134,7 +134,7 @@ async function testDevice(deviceId) {
             body: JSON.stringify({
                 medicine_name: 'Test Notification',
                 dosage: 'Test',
-                instructions: 'This is a test notification from MediTrack'
+                instructions: 'This is a test notification from PharmaBot'
             })
         });
         

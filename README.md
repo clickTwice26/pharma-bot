@@ -1,4 +1,4 @@
-# MediTrack - Smart IoT Medication Management System 💊
+# PharmaBot - Smart IoT Medication Management System
 
 A comprehensive medication management system with AI-powered prescription parsing, IoT device integration (ESP32), and a beautiful mobile-app-like interface.
 
@@ -120,7 +120,7 @@ http://localhost:7878
 
 ### IoT Device Setup (ESP32)
 
-1. **Flash ESP32**: Upload the MediTrack firmware to your ESP32
+1. **Flash ESP32**: Upload the PharmaBot firmware to your ESP32
 2. **Connect to WiFi**: Configure ESP32 WiFi settings
 3. **Get Device ID**: Note the MAC address or unique ID
 4. **Register Device**: Add device in the app's Devices section

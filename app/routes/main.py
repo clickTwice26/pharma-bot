@@ -247,3 +247,15 @@ def profile():
         total_prescriptions=total_prescriptions,
         total_devices=total_devices
     )
+
+
+@main_bp.route('/health')
+def health_check():
+    """Health check endpoint for monitoring"""
+    from app.models import db
+    try:
+        # Test database connection
+        db.session.execute(db.text('SELECT 1'))
+        return {'status': 'healthy', 'database': 'connected'}, 200
+    except Exception as e:
+        return {'status': 'unhealthy', 'error': str(e)}, 500

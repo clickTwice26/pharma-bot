@@ -1,0 +1,81 @@
+# Nginx configuration for PharmaBot
+# Place this file in: /etc/nginx/sites-available/pharmabot
+# Then create symlink: sudo ln -s /etc/nginx/sites-available/pharmabot /etc/nginx/sites-enabled/
+
+upstream pharmabot_app {
+    server 127.0.0.1:7878;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    
+    # Your domain name
+    server_name pharmabot.shagato.me;
+    
+    # Increase client body size for prescription image uploads
+    client_max_body_size 16M;
+    
+    # Logging
+    access_log /var/log/nginx/pharmabot_access.log;
+    error_log /var/log/nginx/pharmabot_error.log;
+    
+    # Root location - proxy to Flask app
+    location / {
+        proxy_pass http://pharmabot_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support (if needed in future)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # Static files (served directly by nginx for better performance)
+    location /static {
+        alias /home/raju/dld_project_backend/app/static;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Uploaded prescription images
+    location /uploads {
+        alias /home/raju/dld_project_backend/app/static/uploads;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+    
+    # Health check endpoint
+    location /health {
+        proxy_pass http://pharmabot_app;
+        access_log off;
+    }
+    
+    # Deny access to sensitive files
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+    
+    location ~ ~$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}
+
+# Optional: Redirect www to non-www
+# server {
+#     listen 80;
+#     server_name www.your-domain.com;
+#     return 301 http://your-domain.com$request_uri;
+# }

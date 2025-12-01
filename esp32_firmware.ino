@@ -1,7 +1,7 @@
 /*
- * MediTrack ESP32 Firmware
+ * PharmaBot ESP32 Firmware
  * 
- * This Arduino sketch enables ESP32 to work with the MediTrack system.
+ * This Arduino sketch enables ESP32 to work with the PharmaBot system.
  * Features:
  * - WiFi connectivity
  * - HTTP server for receiving commands
@@ -19,7 +19,7 @@
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 
-// MediTrack Server Configuration
+// PharmaBot Server Configuration
 const char* serverUrl = "http://YOUR_SERVER_IP:7878";
 String deviceId = "";  // Will be set to MAC address
 
@@ -49,7 +49,7 @@ void setup() {
   deviceId.replace(":", "");
   
   Serial.println("\n=================================");
-  Serial.println("MediTrack ESP32 Firmware v1.0");
+  Serial.println("PharmaBot ESP32 Firmware v1.0");
   Serial.println("=================================");
   Serial.println("Device ID: " + deviceId);
   
@@ -318,9 +318,9 @@ void startupAnimation() {
  * 3. Install required libraries:
  *    - ArduinoJson (by Benoit Blanchon)
  * 4. Update WiFi credentials (ssid and password)
- * 5. Update serverUrl with your MediTrack server IP
+ * 5. Update serverUrl with your PharmaBot server IP
  * 6. Select board: ESP32 Dev Module
  * 7. Upload to ESP32
  * 8. Open Serial Monitor (115200 baud) to see device ID
- * 9. Register device in MediTrack web interface
+ * 9. Register device in PharmaBot web interface
  */
