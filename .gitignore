@@ -1,4 +1,6 @@
 venv/
 *.pyc
 .env
-migrations
+
+.gitignore
+app/static/uploads/

@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.models import db
+from app.utils.timezone import now as tz_now
 
 
 class Prescription(db.Model):
@@ -11,7 +12,10 @@ class Prescription(db.Model):
     parsed_data = db.Column(db.Text, nullable=True)  # JSON string
     doctor_name = db.Column(db.String(100), nullable=True)
     prescription_date = db.Column(db.Date, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    patient_name = db.Column(db.String(100), nullable=True)
+    patient_age = db.Column(db.String(20), nullable=True)
+    patient_gender = db.Column(db.String(20), nullable=True)
+    created_at = db.Column(db.DateTime, default=tz_now)
     is_active = db.Column(db.Boolean, default=True)
     
     # Relationships

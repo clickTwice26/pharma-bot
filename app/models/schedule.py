@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.models import db
+from app.utils.timezone import now as tz_now
 
 
 class Schedule(db.Model):
@@ -13,7 +14,7 @@ class Schedule(db.Model):
     taken_at = db.Column(db.DateTime, nullable=True)
     skipped = db.Column(db.Boolean, default=False)
     notified = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=tz_now)
     
     def __repr__(self):
         return f'<Schedule {self.id} - Medicine {self.medicine_id} at {self.scheduled_time}>'

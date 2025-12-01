@@ -6,6 +6,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 import os
 import json
+from app.utils.timezone import now as tz_now, today_start as tz_today_start
 
 from app.models import db
 from app.models.user import User
@@ -41,19 +42,22 @@ def login_required_api(f):
 def upload_prescription():
     """Upload and parse prescription image"""
     if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
+        return jsonify({'error': 'No file provided', 'message': 'Please select a file to upload'}), 400
     
     file = request.files['file']
     
     if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+        return jsonify({'error': 'No file selected', 'message': 'Please select a file to upload'}), 400
     
     if not allowed_file(file.filename):
-        return jsonify({'error': 'Invalid file type. Use PNG, JPG, or JPEG'}), 400
+        return jsonify({
+            'error': 'Invalid file type',
+            'message': 'Please upload a PNG, JPG, or JPEG image file'
+        }), 400
     
     try:
         # Save file
-        filename = secure_filename(f"{session['user_id']}_{datetime.utcnow().timestamp()}_{file.filename}")
+        filename = secure_filename(f"{session['user_id']}_{int(tz_now().timestamp())}_{file.filename}")
         upload_folder = os.path.join('app', 'static', 'uploads', 'prescriptions')
         os.makedirs(upload_folder, exist_ok=True)
         filepath = os.path.join(upload_folder, filename)
@@ -63,11 +67,23 @@ def upload_prescription():
         parser = GeminiPrescriptionParser()
         parsed_data = parser.parse_prescription(filepath)
         
+        # Check for errors in parsing
+        if 'error' in parsed_data:
+            return jsonify({
+                'error': parsed_data.get('error'),
+                'message': parsed_data.get('message', 'Failed to parse prescription'),
+                'details': parsed_data.get('details', '')
+            }), 400
+        
         # Validate parsed data
         is_valid, message = parser.validate_parsed_data(parsed_data)
         
         if not is_valid:
-            return jsonify({'error': message, 'raw_data': parsed_data}), 400
+            return jsonify({
+                'error': 'Validation failed',
+                'message': message,
+                'raw_data': parsed_data
+            }), 400
         
         # Save prescription to database
         prescription = Prescription(
@@ -76,13 +92,17 @@ def upload_prescription():
             parsed_data=json.dumps(parsed_data),
             doctor_name=parsed_data.get('doctor_name'),
             prescription_date=datetime.strptime(parsed_data['prescription_date'], '%Y-%m-%d').date() 
-                if parsed_data.get('prescription_date') else None
+                if parsed_data.get('prescription_date') else None,
+            patient_name=parsed_data.get('patient_name'),
+            patient_age=parsed_data.get('patient_age'),
+            patient_gender=parsed_data.get('patient_gender')
         )
         db.session.add(prescription)
         db.session.flush()
         
         # Save medicines
         medicines_created = []
+        medicines_list = []
         for med_data in parsed_data.get('medicines', []):
             medicine = Medicine(
                 prescription_id=prescription.id,
@@ -95,8 +115,13 @@ def upload_prescription():
             )
             db.session.add(medicine)
             medicines_created.append(med_data['name'])
-            
-            # Create schedules
+            medicines_list.append(medicine)
+        
+        # Flush to get medicine IDs
+        db.session.flush()
+        
+        # Now create schedules after medicines have IDs
+        for medicine in medicines_list:
             create_schedules_for_medicine(medicine, session['user_id'], parser)
         
         db.session.commit()
@@ -166,7 +191,7 @@ def mark_taken(schedule_id):
         return jsonify({'error': 'Schedule not found'}), 404
     
     schedule.taken = True
-    schedule.taken_at = datetime.utcnow()
+    schedule.taken_at = tz_now()
     db.session.commit()
     
     return jsonify({'success': True, 'schedule': schedule.to_dict()}), 200
@@ -275,13 +300,68 @@ def dispense_medicine(device_id):
         return jsonify(result), 500
 
 
+@api_bp.route('/prescription/<int:prescription_id>', methods=['DELETE'])
+@login_required_api
+def delete_prescription(prescription_id):
+    """Delete a prescription and all associated data"""
+    try:
+        user_id = session['user_id']
+        
+        # Get prescription and verify ownership
+        prescription = Prescription.query.filter_by(
+            id=prescription_id,
+            user_id=user_id
+        ).first()
+        
+        if not prescription:
+            return jsonify({
+                'error': 'Not found',
+                'message': 'Prescription not found or you do not have permission to delete it'
+            }), 404
+        
+        # Delete associated schedules first
+        Schedule.query.filter(
+            Schedule.medicine_id.in_(
+                db.session.query(Medicine.id).filter(Medicine.prescription_id == prescription_id)
+            )
+        ).delete(synchronize_session=False)
+        
+        # Delete associated medicines
+        Medicine.query.filter_by(prescription_id=prescription_id).delete()
+        
+        # Delete the prescription image file
+        if prescription.image_path:
+            try:
+                image_full_path = os.path.join('app', 'static', prescription.image_path)
+                if os.path.exists(image_full_path):
+                    os.remove(image_full_path)
+            except Exception as e:
+                print(f"Error deleting image file: {str(e)}")
+        
+        # Delete the prescription
+        db.session.delete(prescription)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Prescription deleted successfully'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Deletion failed',
+            'message': str(e)
+        }), 500
+
+
 @api_bp.route('/dashboard/stats', methods=['GET'])
 @login_required_api
 def dashboard_stats():
     """Get dashboard statistics"""
     user_id = session['user_id']
     
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = tz_today_start()
     today_end = today_start + timedelta(days=1)
     
     stats = {

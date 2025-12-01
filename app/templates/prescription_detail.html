@@ -18,6 +18,39 @@
 </header>
 
 <div class="app-content">
+    <!-- Patient Details -->
+    {% if prescription.patient_name or prescription.patient_age or prescription.patient_gender %}
+    <div class="card">
+        <h2 class="card-title mb-2"><i class="fas fa-user"></i> Patient Information</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+            {% if prescription.patient_name %}
+            <div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Name</div>
+                <div style="font-weight: 600;">{{ prescription.patient_name }}</div>
+            </div>
+            {% endif %}
+            {% if prescription.patient_age %}
+            <div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Age</div>
+                <div style="font-weight: 600;">{{ prescription.patient_age }}</div>
+            </div>
+            {% endif %}
+            {% if prescription.patient_gender %}
+            <div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Gender</div>
+                <div style="font-weight: 600;">{{ prescription.patient_gender }}</div>
+            </div>
+            {% endif %}
+            {% if prescription.prescription_date %}
+            <div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Date</div>
+                <div style="font-weight: 600;">{{ prescription.prescription_date.strftime('%b %d, %Y') }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Prescription Image -->
     <div class="card">
         <img src="{{ url_for('static', filename=prescription.image_path) }}" 
@@ -75,7 +108,7 @@
     <div class="card">
         <h2 class="card-title mb-2">Actions</h2>
         <button class="btn btn-danger btn-block" onclick="deletePrescription()">
-            🗑️ Delete Prescription
+            <i class="fas fa-trash-alt"></i> Delete Prescription
         </button>
     </div>
 </div>
@@ -83,10 +116,30 @@
 
 {% block extra_js %}
 <script>
-function deletePrescription() {
-    if (confirm('Are you sure you want to delete this prescription? This will also delete all associated medicines and schedules.')) {
-        // Implement delete API call
-        alert('Delete functionality to be implemented');
+async function deletePrescription() {
+    if (!confirm('Are you sure you want to delete this prescription? This will also delete all associated medicines and schedules.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/prescription/{{ prescription.id }}', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Prescription deleted successfully');
+            window.location.href = '/prescriptions';
+        } else {
+            alert(data.message || 'Failed to delete prescription');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while deleting the prescription');
     }
 }
 </script>

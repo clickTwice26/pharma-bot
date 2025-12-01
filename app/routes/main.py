@@ -11,6 +11,7 @@ from app.models.medicine import Medicine
 from app.models.schedule import Schedule
 from app.models.iot_device import IoTDevice
 from datetime import datetime, timedelta
+from app.utils.timezone import now as tz_now, today_start as tz_today_start
 
 main_bp = Blueprint('main', __name__)
 
@@ -42,7 +43,7 @@ def index():
     current_user = get_current_user()
     
     # Get today's schedules
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = tz_today_start()
     today_end = today_start + timedelta(days=1)
     
     today_schedules = Schedule.query.filter(
@@ -203,7 +204,7 @@ def schedules():
     current_user = get_current_user()
     
     # Get upcoming schedules
-    now = datetime.utcnow()
+    now = tz_now()
     upcoming = Schedule.query.filter(
         Schedule.user_id == current_user.id,
         Schedule.scheduled_time >= now
@@ -212,7 +213,9 @@ def schedules():
     return render_template(
         'schedules.html',
         current_user=current_user,
-        schedules=upcoming
+        schedules=upcoming,
+        now=tz_now,
+        timedelta=timedelta
     )
 
 

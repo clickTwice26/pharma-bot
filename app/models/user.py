@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.models import db
+from app.utils.timezone import now as tz_now
 
 
 class User(db.Model):
@@ -8,7 +9,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=tz_now)
     is_active = db.Column(db.Boolean, default=True)
     
     # Relationships

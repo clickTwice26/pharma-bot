@@ -6,6 +6,7 @@ import requests
 from datetime import datetime
 from app.models import db
 from app.models.iot_device import IoTDevice
+from app.utils.timezone import now as tz_now
 
 
 class ESP32Manager:
@@ -22,7 +23,7 @@ class ESP32Manager:
             device.device_name = device_name
             device.ip_address = ip_address
             device.is_online = True
-            device.last_seen = datetime.utcnow()
+            device.last_seen = tz_now()
         else:
             # Create new device
             device = IoTDevice(
@@ -31,7 +32,7 @@ class ESP32Manager:
                 device_name=device_name,
                 ip_address=ip_address,
                 is_online=True,
-                last_seen=datetime.utcnow()
+                last_seen=tz_now()
             )
             db.session.add(device)
         
@@ -45,7 +46,7 @@ class ESP32Manager:
         
         if device:
             device.is_online = is_online
-            device.last_seen = datetime.utcnow()
+            device.last_seen = tz_now()
             if ip_address:
                 device.ip_address = ip_address
             db.session.commit()
@@ -67,7 +68,7 @@ class ESP32Manager:
                 'medicine': medicine_name,
                 'dosage': dosage,
                 'instructions': instructions,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': tz_now().isoformat()
             }
             
             # Send HTTP POST to ESP32
@@ -98,7 +99,7 @@ class ESP32Manager:
                 'command': 'dispense',
                 'compartment': compartment_number,
                 'medicine': medicine_name,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': tz_now().isoformat()
             }
             
             url = f"http://{device.ip_address}/dispense"

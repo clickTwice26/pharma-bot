@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.models import db
+from app.utils.timezone import now as tz_now
 
 
 class IoTDevice(db.Model):
@@ -13,7 +14,7 @@ class IoTDevice(db.Model):
     ip_address = db.Column(db.String(50), nullable=True)
     is_online = db.Column(db.Boolean, default=False)
     last_seen = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=tz_now)
     is_active = db.Column(db.Boolean, default=True)
     
     def __repr__(self):

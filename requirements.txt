@@ -1,8 +1,9 @@
-Flask==3.0.0
-Flask-SQLAlchemy==3.1.1
-Flask-Migrate==4.0.5
-python-dotenv==1.0.0
-google-generativeai==0.3.2
-Pillow==10.1.0
-requests==2.31.0
-Werkzeug==3.0.1
+Flask
+Flask-SQLAlchemy
+Flask-Migrate
+python-dotenv
+google-generativeai
+Pillow
+requests
+Werkzeug
+pytz    

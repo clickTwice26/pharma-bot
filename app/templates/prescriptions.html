@@ -32,32 +32,39 @@
         
         {% if prescriptions %}
         {% for prescription in prescriptions %}
-        <div class="device-card" onclick="window.location.href='{{ url_for('main.prescription_detail', prescription_id=prescription.id) }}'">
-            <div class="device-icon">
-                <img src="{{ url_for('static', filename=prescription.image_path) }}" 
-                     style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
+        <div class="device-card" style="position: relative;">
+            <div style="display: flex; flex: 1; cursor: pointer;" onclick="window.location.href='{{ url_for('main.prescription_detail', prescription_id=prescription.id) }}'">
+                <div class="device-icon">
+                    <img src="{{ url_for('static', filename=prescription.image_path) }}" 
+                         style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
+                </div>
+                <div class="device-info">
+                    <div class="device-name">
+                        {% if prescription.doctor_name %}
+                        Dr. {{ prescription.doctor_name }}
+                        {% else %}
+                        Prescription #{{ prescription.id }}
+                        {% endif %}
+                    </div>
+                    <div class="device-status">
+                        {{ prescription.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                    </div>
+                    <div class="device-status">
+                        {{ prescription.medicines|length }} medicine(s) • 
+                        {% if prescription.is_active %}
+                        <span class="badge badge-success">Active</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <span style="font-size: 1.5rem; color: var(--text-secondary);">›</span>
             </div>
-            <div class="device-info">
-                <div class="device-name">
-                    {% if prescription.doctor_name %}
-                    Dr. {{ prescription.doctor_name }}
-                    {% else %}
-                    Prescription #{{ prescription.id }}
-                    {% endif %}
-                </div>
-                <div class="device-status">
-                    {{ prescription.created_at.strftime('%b %d, %Y at %I:%M %p') }}
-                </div>
-                <div class="device-status">
-                    {{ prescription.medicines|length }} medicine(s) • 
-                    {% if prescription.is_active %}
-                    <span class="badge badge-success">Active</span>
-                    {% else %}
-                    <span class="badge badge-secondary">Inactive</span>
-                    {% endif %}
-                </div>
-            </div>
-            <span style="font-size: 1.5rem; color: var(--text-secondary);">›</span>
+            <button class="btn btn-icon btn-danger" 
+                    onclick="event.stopPropagation(); deletePrescription({{ prescription.id }})"
+                    style="position: absolute; right: 3rem; top: 50%; transform: translateY(-50%); padding: 0.5rem; min-width: auto; width: 2.5rem; height: 2.5rem;">
+                <i class="fas fa-trash-alt"></i>
+            </button>
         </div>
         {% endfor %}
         {% else %}
@@ -77,9 +84,30 @@ async function uploadPrescription(event) {
     const file = event.target.files[0];
     if (!file) return;
     
+    // Validate file type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+    if (!validTypes.includes(file.type)) {
+        alert('Please upload a PNG, JPG, or JPEG image file');
+        event.target.value = '';
+        return;
+    }
+    
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('File size must be less than 10MB');
+        event.target.value = '';
+        return;
+    }
+    
     const statusDiv = document.getElementById('uploadStatus');
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div class="spinner"></div><p class="text-center mt-2">Analyzing prescription with AI...</p>';
+    statusDiv.innerHTML = `
+        <div class="spinner"></div>
+        <p class="text-center mt-2" style="color: var(--primary-color); font-weight: 500;">
+            <i class="fas fa-robot"></i> Analyzing prescription with AI...<br>
+            <small style="color: var(--text-secondary);">This may take a few seconds</small>
+        </p>
+    `;
     
     const formData = new FormData();
     formData.append('file', file);
@@ -95,7 +123,7 @@ async function uploadPrescription(event) {
         if (response.ok) {
             statusDiv.innerHTML = `
                 <div class="alert alert-success">
-                    ✅ Prescription uploaded successfully!<br>
+                    <i class="fas fa-check-circle"></i> Prescription uploaded successfully!<br>
                     <small>Found ${data.medicines.length} medicine(s): ${data.medicines.join(', ')}</small>
                 </div>
             `;
@@ -103,22 +131,54 @@ async function uploadPrescription(event) {
         } else {
             statusDiv.innerHTML = `
                 <div class="alert alert-error">
-                    ❌ ${data.error || 'Upload failed'}
+                    <i class="fas fa-exclamation-circle"></i> <strong>${data.error || 'Upload failed'}</strong><br>
+                    <small>${data.message || 'Please try again with a clearer image'}</small>
+                    ${data.details ? `<br><small style="opacity: 0.7;">${data.details}</small>` : ''}
                 </div>
             `;
+            event.target.value = ''; // Reset file input
         }
     } catch (error) {
         statusDiv.innerHTML = `
             <div class="alert alert-error">
-                ❌ Upload failed: ${error.message}
+                <i class="fas fa-times-circle"></i> <strong>Upload failed</strong><br>
+                <small>${error.message || 'Network error. Please check your connection and try again.'}</small>
             </div>
         `;
+        event.target.value = ''; // Reset file input
     }
 }
 
 // Check if upload parameter is present
 if (window.location.search.includes('upload=1')) {
     document.getElementById('fileInput').click();
+}
+
+async function deletePrescription(prescriptionId) {
+    if (!confirm('Are you sure you want to delete this prescription? This will also delete all associated medicines and schedules.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/prescription/${prescriptionId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert('Prescription deleted successfully');
+            location.reload();
+        } else {
+            alert(data.message || 'Failed to delete prescription');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('An error occurred while deleting the prescription');
+    }
 }
 </script>
 {% endblock %}

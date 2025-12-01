@@ -1,5 +1,6 @@
 from datetime import datetime
 from app.models import db
+from app.utils.timezone import now as tz_now
 
 
 class Medicine(db.Model):
@@ -13,7 +14,7 @@ class Medicine(db.Model):
     duration = db.Column(db.String(100), nullable=True)  # e.g., "7 days", "2 weeks"
     instructions = db.Column(db.Text, nullable=True)  # e.g., "Take after meals"
     timing = db.Column(db.String(200), nullable=True)  # e.g., "morning, evening"
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=tz_now)
     is_active = db.Column(db.Boolean, default=True)
     
     # Relationships
