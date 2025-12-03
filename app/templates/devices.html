@@ -60,8 +60,12 @@
             </div>
             <div class="flex flex-col gap-1">
                 {% if device.is_online %}
-                <button class="btn btn-success btn-sm" onclick="testDevice('{{ device.device_id }}')">
-                    Test
+                <button class="btn btn-primary btn-sm" onclick="openMonitor('{{ device.device_id }}')">
+                    <i class="fas fa-tv"></i> Monitor
+                </button>
+                {% else %}
+                <button class="btn btn-secondary btn-sm" disabled>
+                    <i class="fas fa-tv"></i> Offline
                 </button>
                 {% endif %}
                 <button class="btn btn-danger btn-sm" onclick="removeDevice('{{ device.device_id }}')">
@@ -79,7 +83,7 @@
         {% endif %}
     </div>
 
-    <!-- Device Setup Instructions -->
+    <!-- ESP32 Setup Instructions -->
     <div class="card">
         <h2 class="card-title mb-2">ESP32 Setup Instructions</h2>
         <ol style="padding-left: 1.25rem; line-height: 1.8;">
@@ -91,38 +95,172 @@
         </ol>
     </div>
 </div>
+
+<!-- Hardware Monitor Modal -->
+<div id="monitorModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; overflow-y: auto;">
+    <div style="max-width: 800px; margin: 1rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2 style="margin: 0; color: var(--primary-color);">
+                <i class="fas fa-tv"></i> Hardware Monitor
+                <span id="monitorDeviceName" style="font-size: 0.9rem; color: var(--text-secondary);"></span>
+            </h2>
+            <div>
+                <span id="monitorStatus" class="status-indicator status-online"></span>
+                <span id="monitorStatusText" style="color: var(--secondary-color); font-weight: 600;">LIVE</span>
+            </div>
+        </div>
+        
+        <!-- Real-time Status Bar -->
+        <div style="background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border: 1px solid #333;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 0.75rem; color: #888; text-transform: uppercase;">Current Operation</div>
+                    <div id="currentOperation" style="font-size: 1.25rem; font-weight: 700; color: #00ff00; font-family: monospace;">IDLE</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.75rem; color: #888; text-transform: uppercase;">Last Update</div>
+                    <div id="lastUpdate" style="font-size: 0.9rem; color: #00bfff; font-family: monospace;">--:--:--</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Servo Motors Grid -->
+        <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+            <h3 style="font-size: 1rem; margin-bottom: 1rem; display: flex; align-items: center;">
+                <i class="fas fa-cog" style="margin-right: 0.5rem; color: var(--primary-color);"></i> Servo Motors
+            </h3>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
+                <div class="servo-display" data-servo="1">
+                    <div class="servo-label">Slot 1</div>
+                    <div class="servo-angle" id="servo1Angle">0°</div>
+                    <div class="servo-bar">
+                        <div class="servo-fill" id="servo1Fill" style="width: 0%"></div>
+                    </div>
+                    <div class="servo-pin">Pin 13</div>
+                    <button class="btn-servo-test" onclick="testServo(1)">Test</button>
+                </div>
+                <div class="servo-display" data-servo="2">
+                    <div class="servo-label">Slot 2</div>
+                    <div class="servo-angle" id="servo2Angle">0°</div>
+                    <div class="servo-bar">
+                        <div class="servo-fill" id="servo2Fill" style="width: 0%"></div>
+                    </div>
+                    <div class="servo-pin">Pin 12</div>
+                    <button class="btn-servo-test" onclick="testServo(2)">Test</button>
+                </div>
+                <div class="servo-display" data-servo="3">
+                    <div class="servo-label">Slot 3</div>
+                    <div class="servo-angle" id="servo3Angle">0°</div>
+                    <div class="servo-bar">
+                        <div class="servo-fill" id="servo3Fill" style="width: 0%"></div>
+                    </div>
+                    <div class="servo-pin">Pin 14</div>
+                    <button class="btn-servo-test" onclick="testServo(3)">Test</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sensors Grid -->
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
+            <!-- Ultrasonic Sensor -->
+            <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px;">
+                <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                    <i class="fas fa-ruler" style="color: var(--primary-color); margin-right: 0.5rem;"></i>
+                    <h4 style="font-size: 0.875rem; margin: 0;">Ultrasonic</h4>
+                </div>
+                <div id="ultrasonicDistance" style="font-size: 1.5rem; font-weight: 700; color: #00bfff; font-family: monospace;">0.0 cm</div>
+                <div id="medicineStatus" style="font-size: 0.75rem; margin-top: 0.25rem; color: #888;">No Detection</div>
+                <div style="font-size: 0.7rem; color: #666; margin-top: 0.25rem;">Pin 32/33</div>
+                <button class="btn-sensor-test" onclick="readUltrasonic()" style="margin-top: 0.5rem;">Read Now</button>
+            </div>
+            
+            <!-- LED Indicator -->
+            <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px;">
+                <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                    <i class="fas fa-lightbulb" style="color: var(--primary-color); margin-right: 0.5rem;"></i>
+                    <h4 style="font-size: 0.875rem; margin: 0;">LED</h4>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div id="ledIndicator" style="width: 40px; height: 40px; border-radius: 50%; background: #333; border: 2px solid #555; transition: all 0.3s;"></div>
+                    <div id="ledStatus" style="margin-left: 1rem; font-size: 1.25rem; font-weight: 700; color: #888;">OFF</div>
+                </div>
+                <div style="font-size: 0.7rem; color: #666; margin-top: 0.5rem;">Pin 2</div>
+                <button class="btn-sensor-test" onclick="testLED()" style="margin-top: 0.5rem;">Test</button>
+            </div>
+            
+            <!-- Buzzer -->
+            <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px;">
+                <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                    <i class="fas fa-volume-up" style="color: var(--primary-color); margin-right: 0.5rem;"></i>
+                    <h4 style="font-size: 0.875rem; margin: 0;">Buzzer</h4>
+                </div>
+                <div id="buzzerStatus" style="font-size: 1.25rem; font-weight: 700; color: #888; margin-top: 0.75rem;">SILENT</div>
+                <div style="font-size: 0.7rem; color: #666; margin-top: 0.5rem;">Pin 23</div>
+                <button class="btn-sensor-test" onclick="testBuzzer()" style="margin-top: 0.5rem;">Test</button>
+            </div>
+        </div>
+        
+        <!-- Serial Monitor -->
+        <div style="background: #0d1117; padding: 1rem; border-radius: 8px; border: 1px solid #30363d;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                <h3 style="font-size: 0.875rem; margin: 0; color: #8b949e; text-transform: uppercase;">
+                    <i class="fas fa-terminal"></i> Serial Monitor
+                </h3>
+                <button onclick="clearMonitorLog()" style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 0.75rem;">Clear</button>
+            </div>
+            <div id="monitorLog" style="color: #58a6ff; padding: 0.5rem; font-family: 'Courier New', monospace; font-size: 0.8rem; max-height: 150px; overflow-y: auto; line-height: 1.6;">
+                <div style="color: #7ee787;">✓ Hardware Monitor Initialized</div>
+                <div style="color: #8b949e;">Waiting for device updates...</div>
+            </div>
+        </div>
+        
+        <button class="btn btn-secondary btn-block" onclick="closeMonitor()" style="margin-top: 1rem;">Close Monitor</button>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-document.getElementById('deviceForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const deviceId = document.getElementById('device_id').value;
-    const deviceName = document.getElementById('device_name').value;
-    const ipAddress = document.getElementById('ip_address').value;
-    
-    try {
-        const response = await fetch('/api/device/register', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                device_id: deviceId,
-                device_name: deviceName,
-                ip_address: ipAddress || null
-            })
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('deviceForm');
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const deviceId = document.getElementById('device_id').value;
+            const deviceName = document.getElementById('device_name').value;
+            const ipAddress = document.getElementById('ip_address').value;
+            
+            if (!deviceId || !deviceName) {
+                showToast('Please fill in Device ID and Device Name', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/device/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        device_id: deviceId,
+                        device_name: deviceName,
+                        ip_address: ipAddress || null,
+                        username: '{{ current_user.username }}'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showToast('Device registered successfully!', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast('Error: ' + (data.error || 'Registration failed'), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
         });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            alert('Device registered successfully!');
-            location.reload();
-        } else {
-            alert('Error: ' + (data.error || 'Registration failed'));
-        }
-    } catch (error) {
-        alert('Error: ' + error.message);
     }
 });
 
@@ -141,19 +279,436 @@ async function testDevice(deviceId) {
         const data = await response.json();
         
         if (response.ok) {
-            alert('✅ Test notification sent successfully!');
+            showToast('Test notification sent successfully!', 'success');
         } else {
-            alert('❌ ' + (data.error || 'Test failed'));
+            showToast(data.error || 'Test failed', 'error');
         }
     } catch (error) {
-        alert('❌ Error: ' + error.message);
+        showToast('Error: ' + error.message, 'error');
     }
 }
 
 function removeDevice(deviceId) {
     if (confirm('Are you sure you want to remove this device?')) {
-        alert('Remove functionality to be implemented');
+        showToast('Remove functionality to be implemented', 'info');
     }
 }
+
+let currentMonitorDevice = null;
+let monitorInterval = null;
+
+function openMonitor(deviceId) {
+    currentMonitorDevice = deviceId;
+    document.getElementById('monitorModal').style.display = 'block';
+    logMonitor('✓ Hardware Monitor Initialized', '#7ee787');
+    logMonitor('Connecting to device...', '#8b949e');
+    
+    // Start polling for updates
+    updateMonitor();
+    monitorInterval = setInterval(updateMonitor, 2000);
+}
+
+function closeMonitor() {
+    document.getElementById('monitorModal').style.display = 'none';
+    if (monitorInterval) {
+        clearInterval(monitorInterval);
+        monitorInterval = null;
+    }
+    currentMonitorDevice = null;
+}
+
+function logMonitor(message, color = '#58a6ff') {
+    const log = document.getElementById('monitorLog');
+    const time = new Date().toLocaleTimeString();
+    const div = document.createElement('div');
+    div.style.color = color;
+    div.textContent = `[${time}] ${message}`;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+    
+    // Keep only last 50 lines
+    while (log.children.length > 50) {
+        log.removeChild(log.firstChild);
+    }
+}
+
+function clearMonitorLog() {
+    document.getElementById('monitorLog').innerHTML = '';
+    logMonitor('✓ Log cleared', '#7ee787');
+}
+
+async function updateMonitor() {
+    if (!currentMonitorDevice) return;
+    
+    try {
+        const response = await fetch(`/api/device/monitor/${currentMonitorDevice}`);
+        const data = await response.json();
+        
+        console.log('Monitor data received:', data);
+        
+        if (response.ok) {
+            updateMonitorDisplay(data);
+        } else {
+            logMonitor('✗ Failed to fetch device state', '#f85149');
+        }
+    } catch (error) {
+        logMonitor(`✗ Error: ${error.message}`, '#f85149');
+        console.error('Monitor error:', error);
+    }
+}
+
+function updateMonitorDisplay(data) {
+    console.log('Updating display with:', data);
+    
+    if (!data) {
+        logMonitor('⚠ No data received', '#fbbf24');
+        return;
+    }
+    
+    if (!data.hardware_state) {
+        logMonitor('⚠ No hardware_state in data', '#fbbf24');
+        console.log('Data keys:', Object.keys(data));
+        return;
+    }
+    
+    const state = data.hardware_state;
+    console.log('Hardware state:', state);
+    
+    // Update device name
+    const deviceNameEl = document.getElementById('monitorDeviceName');
+    if (deviceNameEl) {
+        deviceNameEl.textContent = ` - ${data.device_name}`;
+    }
+    
+    // Update status indicator
+    const statusIndicator = document.getElementById('monitorStatus');
+    const statusText = document.getElementById('monitorStatusText');
+    if (statusIndicator && statusText) {
+        if (data.is_online) {
+            statusIndicator.className = 'status-indicator status-online';
+            statusText.textContent = 'LIVE';
+            statusText.style.color = 'var(--secondary-color)';
+        } else {
+            statusIndicator.className = 'status-indicator status-offline';
+            statusText.textContent = 'OFFLINE';
+            statusText.style.color = '#888';
+        }
+    }
+    
+    // Update current operation
+    const operation = state.current_operation || 'idle';
+    const operationEl = document.getElementById('currentOperation');
+    if (operationEl) {
+        operationEl.textContent = operation.toUpperCase().replace(/_/g, ' ');
+        
+        if (operation !== 'idle') {
+            operationEl.style.color = '#fbbf24';
+        } else {
+            operationEl.style.color = '#00ff00';
+        }
+    }
+    
+    // Update last update time
+    const lastUpdateEl = document.getElementById('lastUpdate');
+    if (lastUpdateEl && state.timestamp) {
+        const time = new Date(state.timestamp);
+        lastUpdateEl.textContent = time.toLocaleTimeString();
+    }
+    
+    // Update servo motors
+    const servoAngles = state.servo_angles || [0, 0, 0];
+    for (let i = 0; i < 3; i++) {
+        const angle = servoAngles[i] || 0;
+        const angleEl = document.getElementById(`servo${i+1}Angle`);
+        const fillEl = document.getElementById(`servo${i+1}Fill`);
+        
+        if (angleEl && fillEl) {
+            const oldAngle = parseInt(angleEl.textContent) || 0;
+            angleEl.textContent = `${angle}°`;
+            fillEl.style.width = `${(angle / 180) * 100}%`;
+            
+            // Highlight if changed
+            if (angle !== oldAngle && oldAngle !== 0) {
+                fillEl.style.background = 'linear-gradient(90deg, var(--primary-color), var(--secondary-color))';
+                logMonitor(`🔧 Servo ${i+1}: ${oldAngle}° → ${angle}°`, '#a78bfa');
+                setTimeout(() => {
+                    fillEl.style.background = 'linear-gradient(90deg, #10b981, #3b82f6)';
+                }, 1000);
+            }
+        }
+    }
+    
+    // Update ultrasonic sensor
+    const distance = state.ultrasonic_distance || 0;
+    const medicineDetected = state.medicine_detected || false;
+    const distanceEl = document.getElementById('ultrasonicDistance');
+    const medicineStatusEl = document.getElementById('medicineStatus');
+    
+    if (distanceEl) {
+        distanceEl.textContent = `${distance.toFixed(1)} cm`;
+    }
+    
+    if (medicineStatusEl) {
+        if (medicineDetected) {
+            medicineStatusEl.textContent = '✓ Medicine Detected';
+            medicineStatusEl.style.color = '#10b981';
+        } else {
+            medicineStatusEl.textContent = '✗ No Detection';
+            medicineStatusEl.style.color = '#888';
+        }
+    }
+    
+    // Log data update
+    logMonitor(`📊 Distance: ${distance.toFixed(1)}cm | Operation: ${operation}`, '#58a6ff');
+    
+    // Update LED
+    const ledState = state.led_state || false;
+    const ledIndicator = document.getElementById('ledIndicator');
+    const ledStatus = document.getElementById('ledStatus');
+    
+    if (ledIndicator && ledStatus) {
+        const wasOn = ledIndicator.style.background.includes('rgb');
+        
+        if (ledState) {
+            ledIndicator.style.background = '#fbbf24';
+            ledIndicator.style.boxShadow = '0 0 20px #fbbf24';
+            ledIndicator.style.borderColor = '#fbbf24';
+            ledStatus.textContent = 'ON';
+            ledStatus.style.color = '#fbbf24';
+            
+            if (!wasOn) {
+                logMonitor('💡 LED: ON', '#fbbf24');
+            }
+        } else {
+            ledIndicator.style.background = '#333';
+            ledIndicator.style.boxShadow = 'none';
+            ledIndicator.style.borderColor = '#555';
+            ledStatus.textContent = 'OFF';
+            ledStatus.style.color = '#888';
+            
+            if (wasOn) {
+                logMonitor('💡 LED: OFF', '#888');
+            }
+        }
+    }
+    
+    // Update buzzer
+    const buzzerState = state.buzzer_state || false;
+    const buzzerStatus = document.getElementById('buzzerStatus');
+    
+    if (buzzerStatus) {
+        if (buzzerState) {
+            buzzerStatus.textContent = '🔊 ACTIVE';
+            buzzerStatus.style.color = '#f59e0b';
+            logMonitor('🔔 Buzzer: ACTIVE', '#f59e0b');
+        } else {
+            buzzerStatus.textContent = 'SILENT';
+            buzzerStatus.style.color = '#888';
+        }
+    }
+}
+
+async function sendCommand(command, params = {}) {
+    if (!currentMonitorDevice) return;
+    
+    try {
+        const response = await fetch('/api/device/command', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                device_id: currentMonitorDevice,
+                command: command,
+                params: params
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            logMonitor(`✓ Command sent: ${command}`, '#7ee787');
+            showToast(data.message, 'success');
+        } else {
+            logMonitor(`✗ Command failed: ${data.error}`, '#f85149');
+            showToast(data.error, 'error');
+        }
+    } catch (error) {
+        logMonitor(`✗ Error: ${error.message}`, '#f85149');
+        showToast('Failed to send command', 'error');
+    }
+}
+
+function testServo(slot) {
+    logMonitor(`⚡ Testing Servo ${slot}...`, '#fbbf24');
+    sendCommand('test_servo', { slot: slot });
+}
+
+function readUltrasonic() {
+    logMonitor('📏 Reading ultrasonic sensor...', '#00bfff');
+    sendCommand('read_ultrasonic');
+}
+
+function testBuzzer() {
+    logMonitor('🔔 Testing buzzer...', '#f59e0b');
+    sendCommand('test_buzzer');
+}
+
+function testLED() {
+    logMonitor('💡 Testing LED...', '#fbbf24');
+    sendCommand('test_led');
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        animation: slideIn 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Only reload if monitor is not open
+setInterval(() => {
+    if (!currentMonitorDevice) {
+        location.reload();
+    }
+}, 10000);
 </script>
+
+<style>
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideOut {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+
+.servo-display {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    padding: 0.75rem;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid #475569;
+}
+
+.servo-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.servo-angle {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #60a5fa;
+    font-family: monospace;
+    margin-bottom: 0.5rem;
+}
+
+.servo-bar {
+    background: #1e293b;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.servo-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #3b82f6);
+    transition: width 0.3s ease;
+    border-radius: 4px;
+}
+
+.servo-pin {
+    font-size: 0.7rem;
+    color: #64748b;
+    font-family: monospace;
+}
+
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.status-online {
+    background: var(--secondary-color);
+    box-shadow: 0 0 10px var(--secondary-color);
+    animation: pulse 2s infinite;
+}
+
+.status-offline {
+    background: #6b7280;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.btn-servo-test {
+    margin-top: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.btn-servo-test:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.btn-servo-test:active {
+    transform: translateY(0);
+}
+
+.btn-sensor-test {
+    padding: 0.35rem 0.75rem;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.btn-sensor-test:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-sensor-test:active {
+    transform: translateY(0);
+}
+</style>
 {% endblock %}

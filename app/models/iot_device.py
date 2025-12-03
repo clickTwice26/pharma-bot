@@ -14,6 +14,7 @@ class IoTDevice(db.Model):
     ip_address = db.Column(db.String(50), nullable=True)
     is_online = db.Column(db.Boolean, default=False)
     last_seen = db.Column(db.DateTime, nullable=True)
+    hardware_state = db.Column(db.Text, nullable=True)  # JSON string for hardware state
     created_at = db.Column(db.DateTime, default=tz_now)
     is_active = db.Column(db.Boolean, default=True)
     

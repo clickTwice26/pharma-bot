@@ -74,7 +74,12 @@
     <div class="card">
         <div class="card-header">
             <h2 class="card-title">Medicines</h2>
-            <span class="badge badge-info">{{ medicines|length }}</span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span class="badge badge-info">{{ medicines|length }}</span>
+                <button class="btn btn-sm btn-primary" onclick="autoAssignSlots()" style="padding: 0.35rem 0.75rem;">
+                    <i class="fas fa-magic"></i> Auto-Assign Slots
+                </button>
+            </div>
         </div>
         
         {% for medicine in medicines %}
@@ -101,10 +106,31 @@
                 {% endif %}
                 <div class="schedule-dosage" style="margin-top: 0.5rem;">
                     <i class="fas fa-microchip"></i> Arduino Compartment: 
-                    <span class="badge badge-info">Slot {{ medicine.compartment_number }}</span>
-                    <button class="btn btn-sm btn-secondary" onclick="setCompartment({{ medicine.id }}, {{ medicine.compartment_number }}, '{{ medicine.name }}')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
+                    {% if medicine.compartment_number and medicine.compartment_number > 0 %}
+                        <span class="badge badge-info">Slot {{ medicine.compartment_number }}</span>
+                    {% else %}
+                        <span class="badge" style="background: #ef4444; color: white;">Not Enough Slots</span>
+                    {% endif %}
+                    <button class="btn btn-sm btn-secondary" onclick="setCompartment({{ medicine.id }}, {{ medicine.compartment_number or 0 }}, '{{ medicine.name }}')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
                         <i class="fas fa-edit"></i>
                     </button>
+                </div>
+                <div style="margin-top: 0.5rem;">
+                    {% if medicine.dose_start_date %}
+                    <div class="schedule-dosage">
+                        <i class="fas fa-calendar-day"></i> Dose Start Date: <strong>{{ medicine.dose_start_date.strftime('%b %d, %Y') }}</strong>
+                        <button class="btn btn-sm btn-secondary" onclick="changeStartDate({{ medicine.id }}, '{{ medicine.name }}', '{{ medicine.dose_start_date.strftime('%Y-%m-%d') if medicine.dose_start_date else '' }}')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </div>
+                    {% else %}
+                    <div class="schedule-dosage">
+                        <i class="fas fa-calendar-day"></i> Dose Start Date: <span style="color: var(--text-secondary);">Not set</span>
+                        <button class="btn btn-sm btn-secondary" onclick="changeStartDate({{ medicine.id }}, '{{ medicine.name }}', '')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
+                            <i class="fas fa-plus"></i> Set
+                        </button>
+                    </div>
+                    {% endif %}
                 </div>
                 <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <button class="btn btn-sm btn-secondary" onclick="viewSchedules({{ medicine.id }}, '{{ medicine.name }}')">
@@ -114,6 +140,24 @@
                         <i class="fas fa-sync-alt"></i> Regenerate
                     </button>
                 </div>
+                {% if medicine.compartment_number and medicine.compartment_number > 0 %}
+                <div style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 8px;">
+                    <div style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 600;">
+                        <i class="fas fa-bolt"></i> Manual Dispense
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-sm" onclick="manualDispense({{ medicine.id }}, '{{ medicine.name }}', 'morning')" style="background: #fbbf24; color: #78350f;">
+                            <i class="fas fa-sun"></i> Morning
+                        </button>
+                        <button class="btn btn-sm" onclick="manualDispense({{ medicine.id }}, '{{ medicine.name }}', 'afternoon')" style="background: #fb923c; color: #7c2d12;">
+                            <i class="fas fa-cloud-sun"></i> Afternoon
+                        </button>
+                        <button class="btn btn-sm" onclick="manualDispense({{ medicine.id }}, '{{ medicine.name }}', 'evening')" style="background: #818cf8; color: #312e81;">
+                            <i class="fas fa-moon"></i> Evening
+                        </button>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -187,6 +231,25 @@
         </div>
     </div>
 
+    <!-- Change Start Date Modal -->
+    <div id="changeStartDateModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001;">
+        <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
+            <h2 style="margin-bottom: 1rem;"><i class="fas fa-calendar-day"></i> Change Dose Start Date</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">Set the start date for <strong id="startDateMedicineName"></strong> doses. Schedules will be regenerated from this date.</p>
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Start Date</label>
+                <input type="date" id="doseStartDateInput" 
+                       style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary" onclick="confirmChangeStartDate()">
+                    <i class="fas fa-save"></i> Save & Regenerate
+                </button>
+                <button class="btn btn-secondary" onclick="closeChangeStartDateModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Set Compartment Modal -->
     <div id="setCompartmentModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001;">
         <div style="max-width: 500px; margin: 8rem auto; background: var(--bg-primary); border-radius: 12px; padding: 1.5rem;">
@@ -195,12 +258,9 @@
             </h2>
             <p id="compartmentMedicineName" style="color: var(--text-secondary); margin-bottom: 1rem; font-weight: 600;"></p>
             <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.875rem;">
-                Assign this medicine to a servo motor compartment (0-5) on your Arduino dispenser:
+                Assign this medicine to a servo motor compartment (1-3) on your Arduino dispenser:
             </p>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.5rem;">
-                <button class="btn btn-secondary" onclick="selectCompartment(0)" style="padding: 1rem;">
-                    <i class="fas fa-box"></i><br>Slot 0
-                </button>
                 <button class="btn btn-secondary" onclick="selectCompartment(1)" style="padding: 1rem;">
                     <i class="fas fa-box"></i><br>Slot 1
                 </button>
@@ -209,12 +269,6 @@
                 </button>
                 <button class="btn btn-secondary" onclick="selectCompartment(3)" style="padding: 1rem;">
                     <i class="fas fa-box"></i><br>Slot 3
-                </button>
-                <button class="btn btn-secondary" onclick="selectCompartment(4)" style="padding: 1rem;">
-                    <i class="fas fa-box"></i><br>Slot 4
-                </button>
-                <button class="btn btn-secondary" onclick="selectCompartment(5)" style="padding: 1rem;">
-                    <i class="fas fa-box"></i><br>Slot 5
                 </button>
             </div>
             <button class="btn btn-secondary btn-block" onclick="closeSetCompartmentModal()">Cancel</button>
@@ -366,6 +420,36 @@ function closeSetCompartmentModal() {
     document.getElementById('setCompartmentModal').style.display = 'none';
     document.body.style.overflow = 'auto';
     currentCompartmentMedicineId = null;
+}
+
+async function autoAssignSlots() {
+    if (!confirm('Auto-assign available slots to medicines? Medicines without slots will be marked as "Not Enough Slots".')) {
+        return;
+    }
+    
+    showToast('Auto-assigning slots...', 'info');
+    
+    try {
+        const response = await fetch('/api/prescription/{{ prescription.id }}/auto-assign-slots', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            const msg = `Assigned ${data.assigned_count} medicines. ${data.unassigned_count} marked as "Not Enough Slots"`;
+            showToast(msg, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Failed to auto-assign slots', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error auto-assigning slots', 'error');
+    }
 }
 
 async function viewSchedules(medicineId, medicineName) {

@@ -310,6 +310,61 @@ def regenerate_schedules(medicine_id):
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/prescription/<int:prescription_id>/auto-assign-slots', methods=['POST'])
+@login_required_api
+def auto_assign_slots(prescription_id):
+    """Auto-assign available compartment slots to medicines"""
+    user_id = session['user_id']
+    
+    # Verify prescription belongs to user
+    prescription = Prescription.query.filter_by(
+        id=prescription_id,
+        user_id=user_id
+    ).first()
+    
+    if not prescription:
+        return jsonify({'error': 'Prescription not found'}), 404
+    
+    try:
+        # Get all medicines for this prescription
+        medicines = Medicine.query.filter_by(
+            prescription_id=prescription_id,
+            is_active=True
+        ).order_by(Medicine.id).all()
+        
+        if not medicines:
+            return jsonify({'error': 'No medicines found'}), 404
+        
+        # Available slots (1-3)
+        available_slots = [1, 2, 3]
+        assigned_count = 0
+        unassigned_count = 0
+        
+        for medicine in medicines:
+            if available_slots:
+                # Assign the next available slot
+                slot = available_slots.pop(0)
+                medicine.compartment_number = slot
+                assigned_count += 1
+            else:
+                # Mark as not enough slots (use 0 or None)
+                medicine.compartment_number = 0
+                unassigned_count += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'assigned_count': assigned_count,
+            'unassigned_count': unassigned_count,
+            'message': f'Assigned {assigned_count} medicines, {unassigned_count} without slots'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @api_bp.route('/schedule/<int:schedule_id>', methods=['PUT'])
 @login_required_api
 def update_schedule(schedule_id):
@@ -365,26 +420,48 @@ def delete_schedule(schedule_id):
 
 
 @api_bp.route('/device/register', methods=['POST'])
-@login_required_api
 def register_device():
-    """Register a new ESP32 device"""
+    """Register a new Arduino/ESP32 device (no auth required for device)"""
     data = request.get_json()
     
     device_id = data.get('device_id')
     device_name = data.get('device_name')
     ip_address = data.get('ip_address')
+    username = data.get('username')
     
-    if not device_id or not device_name:
-        return jsonify({'error': 'device_id and device_name are required'}), 400
+    if not device_id or not device_name or not username:
+        return jsonify({'error': 'device_id, device_name, and username are required'}), 400
     
-    device = ESP32Manager.register_device(
-        user_id=session['user_id'],
-        device_id=device_id,
-        device_name=device_name,
-        ip_address=ip_address
-    )
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
     
-    return jsonify({'success': True, 'device': device.to_dict()}), 201
+    device = IoTDevice.query.filter_by(device_id=device_id, user_id=user.id).first()
+    
+    if device:
+        device.device_name = device_name
+        device.ip_address = ip_address
+        device.last_seen = tz_now()
+        device.is_online = True
+    else:
+        device = IoTDevice(
+            user_id=user.id,
+            device_id=device_id,
+            device_name=device_name,
+            device_type='Arduino',
+            ip_address=ip_address,
+            is_online=True,
+            last_seen=tz_now()
+        )
+        db.session.add(device)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Device registered successfully',
+        'device_id': device_id
+    }), 200
 
 
 @api_bp.route('/device/<string:device_id>/status', methods=['POST'])
@@ -582,22 +659,23 @@ def get_device_schedules():
         Schedule.taken == False
     ).order_by(Schedule.scheduled_time).all()
     
-    # Format schedules for Arduino
+    # Format schedules for Arduino (only include medicines with valid compartment slots)
     schedules_data = []
     for schedule in schedules:
         medicine = schedule.medicine
-        schedules_data.append({
-            'id': schedule.id,
-            'medicine_id': medicine.id,
-            'medicine_name': medicine.name,
-            'dosage': medicine.dosage,
-            'instructions': medicine.instructions or '',
-            'compartment_number': medicine.compartment_number,
-            'scheduled_time': schedule.scheduled_time.strftime('%Y-%m-%d %H:%M:%S'),
-            'scheduled_timestamp': int(schedule.scheduled_time.timestamp()),
-            'taken': schedule.taken,
-            'skipped': schedule.skipped
-        })
+        # Only include schedules with valid compartment numbers (1-3)
+        if medicine.compartment_number and medicine.compartment_number > 0:
+            schedules_data.append({
+                'schedule_id': schedule.id,
+                'medicine_id': medicine.id,
+                'medicine_name': medicine.name,
+                'dosage': medicine.dosage,
+                'instructions': medicine.instructions or '',
+                'compartment_number': medicine.compartment_number,
+                'scheduled_time': int(schedule.scheduled_time.timestamp()),
+                'taken': schedule.taken,
+                'skipped': schedule.skipped
+            })
     
     return jsonify({
         'success': True,
@@ -688,3 +766,237 @@ def device_heartbeat():
         'message': 'Heartbeat received',
         'server_time': tz_now().strftime('%Y-%m-%d %H:%M:%S')
     }), 200
+
+
+@api_bp.route('/device/dispense', methods=['POST'])
+def mark_schedule_dispensed():
+    """
+    Mark a schedule as dispensed/taken after Arduino dispenses medicine
+    """
+    data = request.get_json()
+    
+    schedule_id = data.get('schedule_id')
+    device_id = data.get('device_id')
+    
+    if not schedule_id:
+        return jsonify({'error': 'schedule_id is required'}), 400
+    
+    schedule = Schedule.query.get(schedule_id)
+    
+    if not schedule:
+        return jsonify({'error': 'Schedule not found'}), 404
+    
+    schedule.taken = True
+    schedule.taken_at = tz_now()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Schedule marked as dispensed',
+        'schedule_id': schedule_id
+    }), 200
+
+
+@api_bp.route('/device/state', methods=['POST'])
+def update_device_state():
+    """
+    Receive real-time hardware state updates from ESP32
+    """
+    data = request.get_json()
+    device_id = data.get('device_id')
+    if not device_id:
+        return jsonify({'error': 'device_id is required'}), 400
+    
+    username = data.get('username')
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    device = IoTDevice.query.filter_by(
+        device_id=device_id,
+        user_id=user.id
+    ).first()
+    
+    if not device:
+        return jsonify({'error': 'Device not found'}), 404
+    
+    # Store hardware state in device hardware_state
+    device.hardware_state = json.dumps({
+        'servo_angles': data.get('servo_angles', [0, 0, 0]),
+        'ultrasonic_distance': data.get('ultrasonic_distance', 0),
+        'medicine_detected': data.get('medicine_detected', False),
+        'led_state': data.get('led_state', False),
+        'buzzer_state': data.get('buzzer_state', False),
+        'current_operation': data.get('current_operation', 'idle'),
+        'last_dispense_time': data.get('last_dispense_time'),
+        'timestamp': tz_now().isoformat()
+    })
+    
+    db.session.commit()
+    
+    return jsonify({'success': True}), 200
+
+
+@api_bp.route('/device/monitor/<device_id>', methods=['GET'])
+@login_required_api
+def monitor_device(device_id):
+    """
+    Get current hardware state for real-time monitoring
+    """
+    user_id = session.get('user_id')
+    
+    device = IoTDevice.query.filter_by(
+        device_id=device_id,
+        user_id=user_id
+    ).first()
+    
+    if not device:
+        return jsonify({'error': 'Device not found'}), 404
+    
+    # Parse hardware state from hardware_state
+    hardware_state = {}
+    if device.hardware_state:
+        try:
+            hardware_state = json.loads(device.hardware_state)
+        except:
+            hardware_state = {}
+    
+    # Check if device is online (heartbeat within 5 minutes)
+    is_online = False
+    if device.last_seen:
+        time_diff = (tz_now() - device.last_seen).total_seconds()
+        is_online = time_diff < 300
+    
+    return jsonify({
+        'device_id': device.device_id,
+        'device_name': device.device_name,
+        'is_online': is_online,
+        'last_seen': device.last_seen.isoformat() if device.last_seen else None,
+        'hardware_state': hardware_state
+    }), 200
+
+
+@api_bp.route('/device/simulate', methods=['POST'])
+@login_required_api
+def simulate_device():
+    """
+    Simulate device hardware operations for testing
+    """
+    data = request.get_json()
+    
+    operation = data.get('operation')
+    compartment = data.get('compartment', 1)
+    
+    if not operation:
+        return jsonify({'error': 'operation is required'}), 400
+    
+    result = {
+        'success': True,
+        'operation': operation,
+        'compartment': compartment,
+        'timestamp': tz_now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    
+    if operation == 'test_servo':
+        result['message'] = f'Servo motor {compartment} tested: 0° → 90° → 180° → 0°'
+    elif operation == 'test_ultrasonic':
+        result['message'] = 'Ultrasonic sensor tested'
+        result['distance'] = 8.5
+        result['medicine_detected'] = True
+    elif operation == 'test_buzzer':
+        result['message'] = 'Buzzer alert played'
+    elif operation == 'test_led':
+        result['message'] = 'LED indicator tested'
+    elif operation == 'dispense':
+        result['message'] = f'Medicine dispensed from compartment {compartment}'
+    else:
+        return jsonify({'error': 'Invalid operation'}), 400
+    
+    return jsonify(result), 200
+
+
+@api_bp.route('/device/command', methods=['POST'])
+@login_required_api
+def send_device_command():
+    """
+    Send command to ESP32 device for manual control
+    """
+    data = request.get_json()
+    
+    device_id = data.get('device_id')
+    command = data.get('command')
+    
+    if not device_id or not command:
+        return jsonify({'error': 'device_id and command are required'}), 400
+    
+    user_id = session.get('user_id')
+    device = IoTDevice.query.filter_by(
+        device_id=device_id,
+        user_id=user_id
+    ).first()
+    
+    if not device:
+        return jsonify({'error': 'Device not found'}), 404
+    
+    # Store command in device hardware_state for ESP32 to fetch
+    state_data = {}
+    if device.hardware_state:
+        try:
+            state_data = json.loads(device.hardware_state)
+        except:
+            state_data = {}
+    
+    # Add pending command
+    if 'pending_commands' not in state_data:
+        state_data['pending_commands'] = []
+    
+    state_data['pending_commands'].append({
+        'command': command,
+        'params': data.get('params', {}),
+        'timestamp': tz_now().isoformat()
+    })
+    
+    device.hardware_state = json.dumps(state_data)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Command {command} sent to device'
+    }), 200
+
+
+@api_bp.route('/device/commands', methods=['GET'])
+def get_device_commands():
+    """
+    ESP32 polls this endpoint to get pending commands
+    """
+    device_id = request.args.get('device_id')
+    username = request.args.get('username')
+    
+    if not device_id or not username:
+        return jsonify({'commands': []}), 200
+    
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'commands': []}), 200
+    
+    device = IoTDevice.query.filter_by(
+        device_id=device_id,
+        user_id=user.id
+    ).first()
+    
+    if not device or not device.hardware_state:
+        return jsonify({'commands': []}), 200
+    
+    try:
+        state_data = json.loads(device.hardware_state)
+        commands = state_data.get('pending_commands', [])
+        
+        # Clear pending commands after fetching
+        state_data['pending_commands'] = []
+        device.hardware_state = json.dumps(state_data)
+        db.session.commit()
+        
+        return jsonify({'commands': commands}), 200
+    except:
+        return jsonify({'commands': []}), 200

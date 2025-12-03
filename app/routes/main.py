@@ -224,14 +224,28 @@ def schedules():
 def devices():
     """Manage IoT devices"""
     current_user = get_current_user()
-    devices = IoTDevice.query.filter_by(
+    devices_list = IoTDevice.query.filter_by(
         user_id=current_user.id
     ).all()
+    
+    # Update online status based on last heartbeat (5 minutes threshold)
+    from datetime import datetime, timedelta
+    now = tz_now()
+    threshold = timedelta(minutes=5)
+    
+    for device in devices_list:
+        if device.last_seen:
+            time_diff = now - device.last_seen
+            device.is_online = time_diff < threshold
+        else:
+            device.is_online = False
+    
+    db.session.commit()
     
     return render_template(
         'devices.html',
         current_user=current_user,
-        devices=devices
+        devices=devices_list
     )
 
 
