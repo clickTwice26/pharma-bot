@@ -81,6 +81,15 @@ void setup() {
   syncSchedules();
   
   Serial.println("\n✓ Setup complete! Device is ready.\n");
+  Serial.println("=================================");
+  Serial.println("Device Configuration:");
+  Serial.println("=================================");
+  Serial.printf("Server URL: %s\n", SERVER_URL);
+  Serial.printf("Device ID: %s\n", DEVICE_ID);
+  Serial.printf("Username: %s\n", USERNAME);
+  Serial.printf("WiFi IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.println("=================================\n");
+  
   playStartupSound();
 }
 
@@ -117,63 +126,20 @@ void loop() {
 
 void initializeServos() {
   Serial.println("Initializing servos...");
+  
+  // Set all servos to closed position, one at a time
   for (int i = 0; i < NUM_COMPARTMENTS; i++) {
-    Serial.printf("Attaching servo %d to pin %d...\n", i + 1, SERVO_PINS[i]);
+    Serial.printf("Setting servo %d to closed position...\n", i + 1);
     servos[i].attach(SERVO_PINS[i]);
     delay(100);
-    Serial.printf("Setting servo %d to close position (0°)...\n", i + 1);
     servos[i].write(SERVO_CLOSE_ANGLE);
     currentServoAngles[i] = SERVO_CLOSE_ANGLE;
-    delay(500);
+    delay(300);
+    servos[i].detach();  // Immediately detach to prevent interference
+    delay(100);
   }
-  Serial.println("✓ Servos initialized");
   
-  Serial.println("\nTesting all servos...");
-  for (int i = 0; i < NUM_COMPARTMENTS; i++) {
-    Serial.printf("\n=== Testing servo %d (Slot %d, Pin %d) ===\n", i + 1, i + 1, SERVO_PINS[i]);
-    
-    if (i == 0) {
-      Serial.println("\n*** WAITING FOR MEDICINE IN SLOT 1 ***");
-      Serial.println("Please load medicine in compartment 1...");
-      
-      while (!isMedicineLoaded()) {
-        delay(1000);
-        Serial.print(".");
-      }
-      
-      Serial.println("\n✓ Medicine detected! Starting test...\n");
-      delay(500);
-    }
-    
-    currentOperation = "testing_servo_" + String(i + 1);
-    
-    Serial.println("Moving to 0°...");
-    servos[i].write(0);
-    currentServoAngles[i] = 0;
-    sendHardwareState();
-    delay(1000);
-    
-    Serial.println("Moving to 90°...");
-    servos[i].write(90);
-    currentServoAngles[i] = 90;
-    sendHardwareState();
-    delay(1000);
-    
-    Serial.println("Moving to 180°...");
-    servos[i].write(180);
-    currentServoAngles[i] = 180;
-    sendHardwareState();
-    delay(1000);
-    
-    Serial.println("Returning to 0°...");
-    servos[i].write(0);
-    currentServoAngles[i] = 0;
-    sendHardwareState();
-    delay(1000);
-    
-    Serial.printf("✓ Servo %d test complete\n", i + 1);
-  }
-  Serial.println("\n✓ All servos tested successfully\n");
+  Serial.println("✓ All servos initialized and closed\n");
 }
 
 float getDistance() {
@@ -225,6 +191,10 @@ void dispenseFromCompartment(int compartmentNumber) {
   
   playAlertSound();
   
+  // Attach servo for dispense operation
+  servos[index].attach(SERVO_PINS[index]);
+  delay(200);
+  
   currentLedState = true;
   digitalWrite(LED_PIN, HIGH);
   servos[index].write(SERVO_OPEN_ANGLE);
@@ -240,6 +210,11 @@ void dispenseFromCompartment(int compartmentNumber) {
   digitalWrite(LED_PIN, LOW);
   Serial.println("✓ Compartment closed");
   sendHardwareState();
+  
+  delay(500);
+  
+  // Detach servo after operation to prevent jitter
+  servos[index].detach();
   
   playSuccessSound();
   currentOperation = "idle";
@@ -324,15 +299,23 @@ void syncSchedules() {
   
   HTTPClient http;
   String url = String(SERVER_URL) + "/api/device/schedules?username=" + String(USERNAME);
+  Serial.println("📡 Requesting: " + url);
   http.begin(url);
   
   int httpCode = http.GET();
+  Serial.printf("📊 HTTP Response Code: %d\n", httpCode);
   
   if (httpCode == 200) {
     String response = http.getString();
+    Serial.println("📥 Schedule Response:");
+    Serial.println(response);
     parseSchedules(response);
-  } else {
+  } else if (httpCode > 0) {
+    String response = http.getString();
     Serial.printf("✗ Failed to sync schedules (HTTP %d)\n", httpCode);
+    Serial.println("Error response: " + response);
+  } else {
+    Serial.printf("✗ Connection failed: %s\n", http.errorToString(httpCode).c_str());
   }
   
   http.end();
@@ -528,26 +511,55 @@ void checkForCommands() {
   
   HTTPClient http;
   String url = String(SERVER_URL) + "/api/device/commands?device_id=" + String(DEVICE_ID) + "&username=" + String(USERNAME);
+  Serial.println("\n🔍 Checking for commands: " + url);
   http.begin(url);
   
   int httpCode = http.GET();
+  Serial.printf("📊 Commands HTTP Code: %d\n", httpCode);
   
   if (httpCode == 200) {
     String response = http.getString();
+    
+    // Log the raw response
+    Serial.println("\n📥 Raw command response from server:");
+    Serial.println(response);
+    
     DynamicJsonDocument doc(2048);
     DeserializationError error = deserializeJson(doc, response);
     
     if (!error) {
       JsonArray commands = doc["commands"].as<JsonArray>();
       
+      if (commands.size() > 0) {
+        Serial.printf("\n📋 Found %d command(s) to execute:\n", commands.size());
+      }
+      
       for (JsonObject cmd : commands) {
         String command = cmd["command"].as<String>();
         JsonObject params = cmd["params"];
         
         Serial.println("\n⚡ Received command: " + command);
+        
+        // Log all parameters
+        Serial.println("📦 Parameters:");
+        for (JsonPair kv : params) {
+          Serial.printf("  - %s: ", kv.key().c_str());
+          if (kv.value().is<int>()) {
+            Serial.println(kv.value().as<int>());
+          } else if (kv.value().is<String>()) {
+            Serial.println(kv.value().as<String>());
+          } else {
+            Serial.println("(other type)");
+          }
+        }
+        
         executeCommand(command, params);
       }
+    } else {
+      Serial.println("✗ JSON parsing error: " + String(error.c_str()));
     }
+  } else if (httpCode > 0) {
+    Serial.printf("✗ Failed to get commands (HTTP %d)\n", httpCode);
   }
   
   http.end();
@@ -561,6 +573,11 @@ void executeCommand(String command, JsonObject params) {
       Serial.printf("Testing servo %d...\n", slot);
       
       int index = slot - 1;
+      
+      // Attach only this servo
+      servos[index].attach(SERVO_PINS[index]);
+      delay(200);
+      
       servos[index].write(0);
       currentServoAngles[index] = 0;
       sendHardwareState();
@@ -579,6 +596,10 @@ void executeCommand(String command, JsonObject params) {
       servos[index].write(0);
       currentServoAngles[index] = 0;
       sendHardwareState();
+      delay(500);
+      
+      // Detach after test
+      servos[index].detach();
       
       Serial.printf("✓ Servo %d test complete\n", slot);
       currentOperation = "idle";
@@ -631,6 +652,81 @@ void executeCommand(String command, JsonObject params) {
     Serial.println("✓ LED test complete");
     currentOperation = "idle";
     sendHardwareState();
+  }
+  else if (command == "manual_dispense") {
+    int compartment = params["compartment"] | 0;
+    String medicineName = params["medicine_name"] | "Medicine";
+    String timeOfDay = params["time_of_day"] | "unknown";
+    int dispenseCount = params["dispense_count"] | 1;  // Default to 1 if not specified
+    
+    // Check if dispense count is 0
+    if (dispenseCount == 0) {
+      Serial.println("✗ Dispense count is 0 - no medication scheduled for this time");
+      playErrorSound();
+      return;
+    }
+    
+    if (compartment >= 1 && compartment <= NUM_COMPARTMENTS) {
+      currentOperation = "manual_dispense_" + timeOfDay;
+      Serial.printf("Manual dispense triggered for %s (%s)\n", medicineName.c_str(), timeOfDay.c_str());
+      Serial.printf("Dispensing from compartment %d, count: %d\n", compartment, dispenseCount);
+      
+      int index = compartment - 1;
+      
+      // Play alert sound first
+      playAlertSound();
+      
+      // Turn on LED
+      currentLedState = true;
+      digitalWrite(LED_PIN, HIGH);
+      
+      // Attach servo and give it time to stabilize
+      Serial.println("Attaching servo...");
+      servos[index].attach(SERVO_PINS[index]);
+      delay(500);  // Increased delay for servo to stabilize
+      
+      // Dispense multiple times based on dispense_count
+      for (int i = 0; i < dispenseCount; i++) {
+        Serial.printf("Dispense %d of %d\n", i + 1, dispenseCount);
+        
+        // Open compartment (full rotation)
+        Serial.println("Opening compartment (180°)...");
+        servos[index].write(SERVO_OPEN_ANGLE);
+        currentServoAngles[index] = SERVO_OPEN_ANGLE;
+        sendHardwareState();
+        delay(DISPENSE_DURATION);  // Wait for medicine to dispense
+        
+        // Close compartment
+        Serial.println("Closing compartment (0°)...");
+        servos[index].write(SERVO_CLOSE_ANGLE);
+        currentServoAngles[index] = SERVO_CLOSE_ANGLE;
+        sendHardwareState();
+        delay(1000);  // Give time to fully close
+        
+        // Short pause between dispenses (except for the last one)
+        if (i < dispenseCount - 1) {
+          Serial.println("Pausing before next dispense...");
+          delay(500);
+        }
+      }
+      
+      // Detach servo
+      servos[index].detach();
+      Serial.println("Servo detached");
+      
+      // Turn off LED
+      currentLedState = false;
+      digitalWrite(LED_PIN, LOW);
+      
+      // Play success sound
+      playSuccessSound();
+      
+      Serial.printf("✓ Manual dispense complete for %s (%d times)\n", medicineName.c_str(), dispenseCount);
+      currentOperation = "idle";
+      sendHardwareState();
+    } else {
+      Serial.printf("✗ Invalid compartment number: %d\n", compartment);
+    }
   }
 }
 

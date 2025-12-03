@@ -18,6 +18,29 @@
 </header>
 
 <div class="app-content">
+    <!-- Prescription Actions -->
+    <div class="card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <div>
+                <h3 style="margin: 0; font-size: 1rem; opacity: 0.9;">Prescription Date</h3>
+                <p style="margin: 0.25rem 0 0 0; font-size: 1.25rem; font-weight: 600;">
+                    {% if prescription.prescription_date %}
+                        {{ prescription.prescription_date.strftime('%b %d, %Y') }}
+                    {% else %}
+                        Not set
+                    {% endif %}
+                </p>
+            </div>
+            <button onclick="regenerateAllSchedules()" class="btn" 
+                    style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(10px);">
+                <i class="fas fa-sync-alt"></i> Regenerate All Schedules
+            </button>
+        </div>
+        <p style="margin: 0; font-size: 0.875rem; opacity: 0.8;">
+            <i class="fas fa-info-circle"></i> Click to regenerate schedules for all medicines starting from the prescription date
+        </p>
+    </div>
+
     <!-- Patient Details -->
     {% if prescription.patient_name or prescription.patient_age or prescription.patient_gender %}
     <div class="card">
@@ -119,14 +142,14 @@
                     {% if medicine.dose_start_date %}
                     <div class="schedule-dosage">
                         <i class="fas fa-calendar-day"></i> Dose Start Date: <strong>{{ medicine.dose_start_date.strftime('%b %d, %Y') }}</strong>
-                        <button class="btn btn-sm btn-secondary" onclick="changeStartDate({{ medicine.id }}, '{{ medicine.name }}', '{{ medicine.dose_start_date.strftime('%Y-%m-%d') if medicine.dose_start_date else '' }}')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
+                        <button class="btn btn-sm btn-secondary" onclick="changeStartDate({{ medicine.id }}, '{{ medicine.name | replace("'", "\\'") }}', '{{ medicine.dose_start_date.strftime('%Y-%m-%d') }}')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
                             <i class="fas fa-edit"></i>
                         </button>
                     </div>
                     {% else %}
                     <div class="schedule-dosage">
                         <i class="fas fa-calendar-day"></i> Dose Start Date: <span style="color: var(--text-secondary);">Not set</span>
-                        <button class="btn btn-sm btn-secondary" onclick="changeStartDate({{ medicine.id }}, '{{ medicine.name }}', '')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
+                        <button class="btn btn-sm btn-secondary" onclick="changeStartDate({{ medicine.id }}, '{{ medicine.name | replace("'", "\\'") }}', '')" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
                             <i class="fas fa-plus"></i> Set
                         </button>
                     </div>
@@ -387,18 +410,16 @@ function setCompartment(medicineId, currentCompartment, medicineName) {
 
 async function selectCompartment(compartmentNumber) {
     closeSetCompartmentModal();
-    showToast('Updating compartment assignment...', 'success');
+    showToast('Updating compartment assignment...', 'info');
     
     try {
-        const response = await fetch('/api/device/medicine/update-compartment', {
+        const response = await fetch(`/api/medicine/${currentCompartmentMedicineId}/update-compartment`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                medicine_id: currentCompartmentMedicineId,
-                compartment_number: compartmentNumber,
-                username: '{{ current_user.username }}'
+                compartment_number: compartmentNumber
             })
         });
         
@@ -420,6 +441,104 @@ function closeSetCompartmentModal() {
     document.getElementById('setCompartmentModal').style.display = 'none';
     document.body.style.overflow = 'auto';
     currentCompartmentMedicineId = null;
+}
+
+let currentStartDateMedicineId = null;
+
+function changeStartDate(medicineId, medicineName, currentStartDate) {
+    currentStartDateMedicineId = medicineId;
+    console.log('Setting medicine ID:', medicineId);
+    document.getElementById('startDateMedicineName').textContent = medicineName;
+    document.getElementById('doseStartDateInput').value = currentStartDate || new Date().toISOString().split('T')[0];
+    document.getElementById('changeStartDateModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+async function confirmChangeStartDate() {
+    const startDate = document.getElementById('doseStartDateInput').value;
+    const medicineId = currentStartDateMedicineId;
+    
+    console.log('Confirming with medicine ID:', medicineId);
+    
+    if (!startDate) {
+        showToast('Please select a start date', 'error');
+        return;
+    }
+    
+    if (!medicineId) {
+        showToast('Invalid medicine ID', 'error');
+        return;
+    }
+    
+    closeChangeStartDateModal();
+    showToast('Updating dose start date...', 'info');
+    
+    try {
+        const response = await fetch(`/api/medicine/${medicineId}/update-start-date`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                start_date: startDate
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast('Dose start date updated and schedules regenerated', 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast(data.error || 'Failed to update start date', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error updating start date', 'error');
+    }
+}
+
+function closeChangeStartDateModal() {
+    document.getElementById('changeStartDateModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    currentStartDateMedicineId = null;
+}
+
+async function manualDispense(medicineId, medicineName, timeOfDay) {
+    const timeLabels = {
+        'morning': 'Morning',
+        'afternoon': 'Afternoon',
+        'evening': 'Evening'
+    };
+    
+    if (!confirm(`Trigger manual dispense for ${medicineName} - ${timeLabels[timeOfDay]}?`)) {
+        return;
+    }
+    
+    showToast(`Triggering ${timeLabels[timeOfDay].toLowerCase()} dispense...`, 'info');
+    
+    try {
+        const response = await fetch(`/api/medicine/${medicineId}/manual-dispense`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                time_of_day: timeOfDay
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast(data.message || 'Manual dispense triggered successfully', 'success');
+        } else {
+            showToast(data.error || 'Failed to trigger dispense', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error triggering dispense', 'error');
+    }
 }
 
 async function autoAssignSlots() {
@@ -664,6 +783,66 @@ async function confirmRegenerate() {
     }
 }
 
+function regenerateAllSchedules() {
+    // Set default date to today if prescription date is not set
+    const dateInput = document.getElementById('scheduleStartDate');
+    if (!dateInput.value) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+    }
+    
+    // Show modal
+    document.getElementById('regenerateAllModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeRegenerateAllModal() {
+    document.getElementById('regenerateAllModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+}
+
+async function confirmRegenerateAll() {
+    const startDate = document.getElementById('scheduleStartDate').value;
+    
+    if (!startDate) {
+        showToast('Please select a start date', 'error');
+        return;
+    }
+    
+    closeRegenerateAllModal();
+    showToast('Regenerating schedules...', 'info');
+    
+    try {
+        const response = await fetch(`/api/prescription/{{ prescription.id }}/regenerate-all-schedules`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                start_date: startDate
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showToast(`✓ Regenerated ${data.total_schedules} schedules for ${data.medicines.length} medicines`, 'success');
+            
+            // Show detailed results
+            setTimeout(() => {
+                let details = data.medicines.map(m => `${m.name}: ${m.schedules_created} schedules`).join('\n');
+                alert(`Schedules Regenerated Successfully!\n\nStart Date: ${data.start_date}\n\n${details}`);
+                location.reload();
+            }, 1000);
+        } else {
+            showToast(data.error || 'Failed to regenerate schedules', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error regenerating schedules', 'error');
+    }
+}
+
 function closeRegenerateModal() {
     document.getElementById('regenerateModal').style.display = 'none';
     document.body.style.overflow = 'auto';
@@ -677,12 +856,16 @@ window.onclick = function(event) {
     const deleteScheduleModal = document.getElementById('deleteScheduleModal');
     const deletePrescriptionModal = document.getElementById('deletePrescriptionModal');
     const setCompartmentModal = document.getElementById('setCompartmentModal');
+    const regenerateAllModal = document.getElementById('regenerateAllModal');
     
     if (event.target === scheduleModal) {
         closeModal();
     }
     if (event.target === regenerateModal) {
         closeRegenerateModal();
+    }
+    if (event.target === regenerateAllModal) {
+        closeRegenerateAllModal();
     }
     if (event.target === editScheduleModal) {
         closeEditScheduleModal();
@@ -703,6 +886,7 @@ document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         closeModal();
         closeRegenerateModal();
+        closeRegenerateAllModal();
         closeEditScheduleModal();
         closeDeleteScheduleModal();
         closeDeletePrescriptionModal();
@@ -710,4 +894,47 @@ document.addEventListener('keydown', function(event) {
     }
 });
 </script>
+
+<!-- Regenerate All Schedules Modal -->
+<div id="regenerateAllModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h3><i class="fas fa-sync-alt"></i> Regenerate All Schedules</h3>
+            <button class="modal-close" onclick="closeRegenerateAllModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
+                This will delete all existing schedules and create new ones for all medicines in this prescription.
+            </p>
+            
+            <div class="form-group">
+                <label for="scheduleStartDate">
+                    <i class="fas fa-calendar-alt"></i> Start Date
+                </label>
+                <input type="date" id="scheduleStartDate" class="form-input" 
+                       value="{{ prescription.prescription_date.strftime('%Y-%m-%d') if prescription.prescription_date else '' }}" 
+                       required>
+                <small style="color: var(--text-secondary); display: block; margin-top: 0.5rem;">
+                    Schedules will be generated starting from this date
+                </small>
+            </div>
+            
+            <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 1rem; margin-top: 1rem;">
+                <strong style="color: #856404;"><i class="fas fa-exclamation-triangle"></i> Warning:</strong>
+                <p style="margin: 0.5rem 0 0 0; color: #856404; font-size: 0.875rem;">
+                    All existing schedules for medicines in this prescription will be deleted and replaced with new ones.
+                </p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeRegenerateAllModal()" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Cancel
+            </button>
+            <button onclick="confirmRegenerateAll()" class="btn btn-primary">
+                <i class="fas fa-sync-alt"></i> Regenerate All
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

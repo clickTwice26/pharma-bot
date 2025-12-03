@@ -77,6 +77,70 @@ def index():
         Schedule.taken == True
     ).count()
     
+    # Calculate detailed medicine statistics
+    medicine_stats = []
+    active_medicines = Medicine.query.join(Prescription).filter(
+        Prescription.user_id == current_user.id,
+        Medicine.is_active == True
+    ).all()
+    
+    # Get last 7 days for weekly stats
+    week_ago = today_start - timedelta(days=7)
+    
+    for medicine in active_medicines:
+        # Total schedules for this medicine
+        total_schedules = Schedule.query.filter(
+            Schedule.medicine_id == medicine.id,
+            Schedule.scheduled_time >= week_ago
+        ).count()
+        
+        # Taken doses
+        taken_doses = Schedule.query.filter(
+            Schedule.medicine_id == medicine.id,
+            Schedule.scheduled_time >= week_ago,
+            Schedule.taken == True
+        ).count()
+        
+        # Skipped doses
+        skipped_doses = Schedule.query.filter(
+            Schedule.medicine_id == medicine.id,
+            Schedule.scheduled_time >= week_ago,
+            Schedule.skipped == True
+        ).count()
+        
+        # Calculate adherence rate
+        adherence_rate = 0
+        if total_schedules > 0:
+            adherence_rate = int((taken_doses / total_schedules) * 100)
+        
+        # Today's doses
+        today_total = Schedule.query.filter(
+            Schedule.medicine_id == medicine.id,
+            Schedule.scheduled_time >= today_start,
+            Schedule.scheduled_time < today_end
+        ).count()
+        
+        today_taken = Schedule.query.filter(
+            Schedule.medicine_id == medicine.id,
+            Schedule.scheduled_time >= today_start,
+            Schedule.scheduled_time < today_end,
+            Schedule.taken == True
+        ).count()
+        
+        medicine_stats.append({
+            'medicine': medicine,
+            'total_schedules': total_schedules,
+            'taken_doses': taken_doses,
+            'skipped_doses': skipped_doses,
+            'adherence_rate': adherence_rate,
+            'today_total': today_total,
+            'today_taken': today_taken,
+            'compartment_number': medicine.compartment_number
+        })
+    
+    # Sort by adherence rate (lowest first to highlight issues)
+    medicine_stats.sort(key=lambda x: x['adherence_rate'])
+    
     return render_template(
         'dashboard.html',
         current_user=current_user,
@@ -85,7 +149,8 @@ def index():
         devices=devices,
         total_medicines=total_medicines,
         taken_today=taken_today,
-        total_today=len(today_schedules)
+        total_today=len(today_schedules),
+        medicine_stats=medicine_stats
     )
 
 

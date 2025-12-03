@@ -310,6 +310,320 @@ def regenerate_schedules(medicine_id):
         return jsonify({'error': str(e)}), 500
 
 
+@api_bp.route('/medicine/<int:medicine_id>/update-start-date', methods=['POST'])
+@login_required_api
+def update_medicine_start_date(medicine_id):
+    """Update dose start date for a medicine and regenerate schedules"""
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    
+    # Verify medicine belongs to user
+    medicine = Medicine.query.join(Prescription).filter(
+        Medicine.id == medicine_id,
+        Prescription.user_id == user_id
+    ).first()
+    
+    if not medicine:
+        return jsonify({'error': 'Medicine not found'}), 404
+    
+    try:
+        # Get and validate start date
+        start_date_str = data.get('start_date')
+        if not start_date_str:
+            return jsonify({'error': 'Start date is required'}), 400
+        
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Update medicine dose start date
+        medicine.dose_start_date = start_date.date()
+        
+        # Delete existing future schedules
+        Schedule.query.filter(
+            Schedule.medicine_id == medicine_id,
+            Schedule.user_id == user_id,
+            Schedule.scheduled_time >= tz_now(),
+            Schedule.taken == False
+        ).delete()
+        
+        # Create new schedules from the new start date
+        parser = GeminiPrescriptionParser()
+        create_schedules_for_medicine(medicine, user_id, parser, start_date)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Dose start date updated and schedules regenerated',
+            'start_date': start_date_str
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/medicine/<int:medicine_id>/update-compartment', methods=['POST'])
+@login_required_api
+def update_medicine_compartment_frontend(medicine_id):
+    """Update compartment number for a medicine (frontend with session auth)"""
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    
+    # Verify medicine belongs to user
+    medicine = Medicine.query.join(Prescription).filter(
+        Medicine.id == medicine_id,
+        Prescription.user_id == user_id
+    ).first()
+    
+    if not medicine:
+        return jsonify({'error': 'Medicine not found'}), 404
+    
+    compartment_number = data.get('compartment_number')
+    if compartment_number is None:
+        return jsonify({'error': 'compartment_number is required'}), 400
+    
+    try:
+        medicine.compartment_number = compartment_number
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Compartment updated to Slot {compartment_number}',
+            'medicine': medicine.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/medicine/<int:medicine_id>/manual-dispense', methods=['POST'])
+@login_required_api
+def manual_dispense_medicine(medicine_id):
+    """Manually trigger dispense for a specific time of day"""
+    user_id = session['user_id']
+    data = request.get_json() or {}
+    
+    # Verify medicine belongs to user
+    medicine = Medicine.query.join(Prescription).filter(
+        Medicine.id == medicine_id,
+        Prescription.user_id == user_id
+    ).first()
+    
+    if not medicine:
+        return jsonify({'error': 'Medicine not found'}), 404
+    
+    # Check if medicine has a compartment assigned
+    if not medicine.compartment_number or medicine.compartment_number <= 0:
+        return jsonify({'error': 'Medicine has no compartment assigned'}), 400
+    
+    # Get time of day
+    time_of_day = data.get('time_of_day', '').lower()
+    if time_of_day not in ['morning', 'afternoon', 'evening']:
+        return jsonify({'error': 'Invalid time_of_day. Must be morning, afternoon, or evening'}), 400
+    
+    try:
+        # Parse dispense count from frequency/timing
+        dispense_count = None  # Start with None to detect if we found a value
+        
+        print(f"[MANUAL DISPENSE] Medicine: {medicine.name}")
+        print(f"[MANUAL DISPENSE] Timing: {medicine.timing}")
+        print(f"[MANUAL DISPENSE] Frequency: {medicine.frequency}")
+        print(f"[MANUAL DISPENSE] Dosage: {medicine.dosage}")
+        print(f"[MANUAL DISPENSE] Requested time_of_day: {time_of_day}")
+        
+        # Check frequency first for numeric pattern like "1-0-1" or "2+0+1"
+        if medicine.frequency:
+            frequency_parts = medicine.frequency.replace('-', '+').split('+')
+            time_index = {'morning': 0, 'afternoon': 1, 'evening': 2}
+            if time_of_day in time_index and len(frequency_parts) > time_index[time_of_day]:
+                try:
+                    count = int(frequency_parts[time_index[time_of_day]].strip())
+                    dispense_count = count  # Set even if 0, this is intentional
+                    print(f"[MANUAL DISPENSE] Parsed count from frequency '{medicine.frequency}': {count} for {time_of_day}")
+                except ValueError:
+                    pass
+        
+        # If frequency didn't provide a count, check timing text
+        if dispense_count is None and medicine.timing:
+            timing_lower = medicine.timing.lower()
+            if time_of_day == 'afternoon' and 'afternoon' not in timing_lower:
+                dispense_count = 0
+                print(f"[MANUAL DISPENSE] Timing '{medicine.timing}' does not include {time_of_day}, setting count to 0")
+            elif time_of_day == 'morning' and 'morning' not in timing_lower:
+                dispense_count = 0
+                print(f"[MANUAL DISPENSE] Timing '{medicine.timing}' does not include {time_of_day}, setting count to 0")
+            elif time_of_day == 'evening' and 'evening' not in timing_lower and 'night' not in timing_lower:
+                dispense_count = 0
+                print(f"[MANUAL DISPENSE] Timing '{medicine.timing}' does not include {time_of_day}, setting count to 0")
+        
+        # Fallback: parse from dosage if timing didn't provide a value
+        if dispense_count is None and medicine.dosage:
+            import re
+            dosage_match = re.search(r'(\d+)\s*(tablet|pill|capsule|sachet)', medicine.dosage.lower())
+            if dosage_match:
+                dispense_count = int(dosage_match.group(1))
+                print(f"[MANUAL DISPENSE] Parsed count from dosage '{medicine.dosage}': {dispense_count}")
+        
+        # Final default if nothing was parsed
+        if dispense_count is None:
+            dispense_count = 1
+            print(f"[MANUAL DISPENSE] Using default count: 1")
+        
+        # Check if dispense count is 0 - should not dispense
+        if dispense_count == 0:
+            print(f"[MANUAL DISPENSE] Dispense count is 0 for {time_of_day} - no medication scheduled")
+            return jsonify({
+                'error': f'No medication scheduled for {time_of_day}. The dosage for this time is 0.',
+                'dispense_count': 0
+            }), 400
+        
+        # Get the user's active device
+        device = IoTDevice.query.filter_by(
+            user_id=user_id,
+            is_active=True
+        ).first()
+        
+        if not device:
+            return jsonify({'error': 'No active device found for this user'}), 404
+        
+        # Create a manual dispense command with dispense count
+        dispense_command = {
+            'command': 'manual_dispense',
+            'params': {
+                'compartment': medicine.compartment_number,
+                'medicine_name': medicine.name,
+                'time_of_day': time_of_day,
+                'dispense_count': dispense_count
+            },
+            'timestamp': tz_now().isoformat()
+        }
+        
+        # Add command to device's pending commands
+        print(f"[MANUAL DISPENSE] Creating command for device: {device.device_id}")
+        print(f"[MANUAL DISPENSE] Command: {dispense_command}")
+        
+        hardware_state = json.loads(device.hardware_state or '{}')
+        print(f"[MANUAL DISPENSE] Current hardware_state: {hardware_state}")
+        
+        if 'pending_commands' not in hardware_state:
+            hardware_state['pending_commands'] = []
+        hardware_state['pending_commands'].append(dispense_command)
+        device.hardware_state = json.dumps(hardware_state)
+        
+        print(f"[MANUAL DISPENSE] Updated hardware_state: {hardware_state}")
+        print(f"[MANUAL DISPENSE] Pending commands count: {len(hardware_state['pending_commands'])}")
+        
+        db.session.commit()
+        print(f"[MANUAL DISPENSE] Command committed to database")
+        
+        time_labels = {
+            'morning': 'Morning',
+            'afternoon': 'Afternoon',
+            'evening': 'Evening'
+        }
+        
+        count_text = f"{dispense_count} time{'s' if dispense_count > 1 else ''}"
+        
+        return jsonify({
+            'success': True,
+            'message': f'{time_labels[time_of_day]} dispense triggered for {medicine.name} ({count_text})',
+            'compartment': medicine.compartment_number,
+            'time_of_day': time_of_day,
+            'dispense_count': dispense_count
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/prescription/<int:prescription_id>/regenerate-all-schedules', methods=['POST'])
+@login_required_api
+def regenerate_all_schedules(prescription_id):
+    """Regenerate schedules for all medicines in a prescription based on prescription date"""
+    user_id = session['user_id']
+    
+    # Verify prescription belongs to user
+    prescription = Prescription.query.filter_by(
+        id=prescription_id,
+        user_id=user_id
+    ).first()
+    
+    if not prescription:
+        return jsonify({'error': 'Prescription not found'}), 404
+    
+    # Get all medicines in this prescription
+    medicines = Medicine.query.filter_by(
+        prescription_id=prescription_id,
+        is_active=True
+    ).all()
+    
+    if not medicines:
+        return jsonify({'error': 'No active medicines found in this prescription'}), 404
+    
+    # Get start date from request or use prescription date
+    data = request.get_json() or {}
+    start_date_str = data.get('start_date')
+    
+    if start_date_str:
+        try:
+            from datetime import datetime
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    else:
+        # Fallback to prescription date
+        start_date = prescription.prescription_date
+        if not start_date:
+            return jsonify({'error': 'Start date not provided and prescription date not set'}), 400
+    
+    print(f"[REGENERATE ALL] Regenerating schedules for prescription {prescription_id} with {len(medicines)} medicines")
+    print(f"[REGENERATE ALL] Using prescription date as start date: {start_date}")
+    
+    total_schedules_created = 0
+    medicines_processed = []
+    
+    for medicine in medicines:
+        try:
+            # Set dose start date to prescription date
+            medicine.dose_start_date = start_date
+            
+            # Delete existing schedules for this medicine
+            Schedule.query.filter_by(
+                medicine_id=medicine.id,
+                user_id=user_id
+            ).delete()
+            
+            # Generate new schedules
+            from app.services.gemini_service import GeminiPrescriptionParser
+            parser = GeminiPrescriptionParser()
+            schedules_created = create_medication_schedules(medicine, start_date, parser)
+            
+            total_schedules_created += schedules_created
+            medicines_processed.append({
+                'name': medicine.name,
+                'schedules_created': schedules_created
+            })
+            
+            print(f"[REGENERATE ALL] {medicine.name}: {schedules_created} schedules created")
+            
+        except Exception as e:
+            print(f"[REGENERATE ALL] Error processing {medicine.name}: {str(e)}")
+            continue
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Regenerated schedules for {len(medicines_processed)} medicines',
+        'total_schedules': total_schedules_created,
+        'medicines': medicines_processed,
+        'start_date': start_date.strftime('%Y-%m-%d')
+    }), 200
+
+
 @api_bp.route('/prescription/<int:prescription_id>/auto-assign-slots', methods=['POST'])
 @login_required_api
 def auto_assign_slots(prescription_id):
@@ -638,19 +952,27 @@ def get_device_schedules():
     Returns schedules for the next 7 days with medicine compartment mapping
     """
     username = request.args.get('username')
+    print(f"[DEVICE API] Schedule request received from username: {username}")
     
     if not username:
+        print("[DEVICE API] ERROR: No username provided")
         return jsonify({'error': 'Username is required'}), 400
     
     # Find user by username
     user = User.query.filter_by(username=username).first()
     
     if not user:
+        print(f"[DEVICE API] ERROR: User '{username}' not found")
         return jsonify({'error': 'User not found'}), 404
     
     # Get schedules for next 7 days
     now = tz_now()
     future_date = now + timedelta(days=7)
+    
+    print(f"[DEVICE API] Querying schedules from {now} to {future_date}")
+    
+    all_schedules = Schedule.query.filter(Schedule.user_id == user.id).all()
+    print(f"[DEVICE API] Total schedules in database for user: {len(all_schedules)}")
     
     schedules = Schedule.query.filter(
         Schedule.user_id == user.id,
@@ -658,6 +980,8 @@ def get_device_schedules():
         Schedule.scheduled_time <= future_date,
         Schedule.taken == False
     ).order_by(Schedule.scheduled_time).all()
+    
+    print(f"[DEVICE API] Schedules matching criteria (upcoming, not taken): {len(schedules)}")
     
     # Format schedules for Arduino (only include medicines with valid compartment slots)
     schedules_data = []
@@ -676,6 +1000,10 @@ def get_device_schedules():
                 'taken': schedule.taken,
                 'skipped': schedule.skipped
             })
+    
+    print(f"[DEVICE API] Returning {len(schedules_data)} schedules for user '{username}'")
+    if len(schedules_data) > 0:
+        print(f"[DEVICE API] First schedule: {schedules_data[0]}")
     
     return jsonify({
         'success': True,
@@ -821,6 +1149,12 @@ def update_device_state():
         return jsonify({'error': 'Device not found'}), 404
     
     # Store hardware state in device hardware_state
+    # IMPORTANT: Preserve pending_commands from existing state
+    existing_state = json.loads(device.hardware_state or '{}')
+    pending_commands = existing_state.get('pending_commands', [])
+    
+    print(f"[STATE UPDATE] Preserving {len(pending_commands)} pending command(s)")
+    
     device.hardware_state = json.dumps({
         'servo_angles': data.get('servo_angles', [0, 0, 0]),
         'ultrasonic_distance': data.get('ultrasonic_distance', 0),
@@ -829,7 +1163,8 @@ def update_device_state():
         'buzzer_state': data.get('buzzer_state', False),
         'current_operation': data.get('current_operation', 'idle'),
         'last_dispense_time': data.get('last_dispense_time'),
-        'timestamp': tz_now().isoformat()
+        'timestamp': tz_now().isoformat(),
+        'pending_commands': pending_commands  # Preserve pending commands!
     })
     
     db.session.commit()
@@ -972,12 +1307,15 @@ def get_device_commands():
     """
     device_id = request.args.get('device_id')
     username = request.args.get('username')
+    print(f"[DEVICE API] Commands request - device_id: {device_id}, username: {username}")
     
     if not device_id or not username:
+        print("[DEVICE API] Missing device_id or username")
         return jsonify({'commands': []}), 200
     
     user = User.query.filter_by(username=username).first()
     if not user:
+        print(f"[DEVICE API] User '{username}' not found")
         return jsonify({'commands': []}), 200
     
     device = IoTDevice.query.filter_by(
@@ -985,12 +1323,20 @@ def get_device_commands():
         user_id=user.id
     ).first()
     
-    if not device or not device.hardware_state:
+    if not device:
+        print(f"[DEVICE API] Device '{device_id}' not found for user '{username}'")
+        return jsonify({'commands': []}), 200
+        
+    if not device.hardware_state:
+        print(f"[DEVICE API] Device '{device_id}' has no hardware_state")
         return jsonify({'commands': []}), 200
     
     try:
         state_data = json.loads(device.hardware_state)
         commands = state_data.get('pending_commands', [])
+        print(f"[DEVICE API] Found {len(commands)} pending command(s)")
+        if commands:
+            print(f"[DEVICE API] Commands: {commands}")
         
         # Clear pending commands after fetching
         state_data['pending_commands'] = []
@@ -998,5 +1344,6 @@ def get_device_commands():
         db.session.commit()
         
         return jsonify({'commands': commands}), 200
-    except:
+    except Exception as e:
+        print(f"[DEVICE API] Error processing commands: {str(e)}")
         return jsonify({'commands': []}), 200

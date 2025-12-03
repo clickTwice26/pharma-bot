@@ -27,6 +27,106 @@
         </div>
     </div>
 
+    <!-- Medicine Statistics -->
+    {% if medicine_stats %}
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title"><i class="fas fa-chart-line"></i> Medicine Statistics</h2>
+            <span class="badge badge-info">Last 7 days</span>
+        </div>
+        
+        <div style="padding: 0;">
+            {% for stat in medicine_stats %}
+            <div class="medicine-stat-item" style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                            <h3 style="margin: 0; font-size: 1rem; font-weight: 600;">{{ stat.medicine.name }}</h3>
+                            {% if stat.compartment_number > 0 %}
+                            <span class="badge" style="background: #6366f1; font-size: 0.75rem;">
+                                <i class="fas fa-box"></i> Slot {{ stat.compartment_number }}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div style="font-size: 0.875rem; color: var(--text-secondary);">{{ stat.medicine.dosage }}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 1.5rem; font-weight: 700; 
+                            {% if stat.adherence_rate >= 80 %}color: var(--secondary-color);
+                            {% elif stat.adherence_rate >= 60 %}color: var(--warning-color);
+                            {% else %}color: var(--danger-color);
+                            {% endif %}">
+                            {{ stat.adherence_rate }}%
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Adherence</div>
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 0.75rem;">
+                    <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: var(--radius-sm); text-align: center;">
+                        <div style="font-size: 1.25rem; font-weight: 600; color: var(--secondary-color);">{{ stat.taken_doses }}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Taken</div>
+                    </div>
+                    <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: var(--radius-sm); text-align: center;">
+                        <div style="font-size: 1.25rem; font-weight: 600; color: var(--danger-color);">{{ stat.skipped_doses }}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Skipped</div>
+                    </div>
+                    <div style="background: var(--bg-secondary); padding: 0.5rem; border-radius: var(--radius-sm); text-align: center;">
+                        <div style="font-size: 1.25rem; font-weight: 600; color: var(--text-secondary);">{{ stat.total_schedules }}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Total</div>
+                    </div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div style="margin-bottom: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem; font-size: 0.75rem; color: var(--text-secondary);">
+                        <span>Weekly Progress</span>
+                        <span>{{ stat.taken_doses }}/{{ stat.total_schedules }} doses</span>
+                    </div>
+                    <div style="width: 100%; height: 8px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden;">
+                        <div style="height: 100%; 
+                            {% if stat.adherence_rate >= 80 %}background: var(--secondary-color);
+                            {% elif stat.adherence_rate >= 60 %}background: var(--warning-color);
+                            {% else %}background: var(--danger-color);
+                            {% endif %}
+                            width: {{ stat.adherence_rate }}%; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+                
+                <!-- Today's Status -->
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem; background: var(--bg-secondary); border-radius: var(--radius-sm);">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-calendar-day" style="color: var(--primary-color);"></i>
+                        <span style="font-size: 0.875rem; font-weight: 500;">Today:</span>
+                    </div>
+                    <div style="font-weight: 600;">
+                        {% if stat.today_total > 0 %}
+                            <span style="{% if stat.today_taken == stat.today_total %}color: var(--secondary-color);{% endif %}">
+                                {{ stat.today_taken }}/{{ stat.today_total }} doses
+                            </span>
+                            {% if stat.today_taken == stat.today_total %}
+                                <i class="fas fa-check-circle" style="color: var(--secondary-color); margin-left: 0.25rem;"></i>
+                            {% endif %}
+                        {% else %}
+                            <span style="color: var(--text-secondary);">No doses scheduled</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if stat.medicine.instructions %}
+                <div style="margin-top: 0.75rem; padding: 0.5rem; background: #fef3c7; border-left: 3px solid var(--warning-color); border-radius: 4px;">
+                    <div style="font-size: 0.75rem; font-weight: 600; color: #92400e; margin-bottom: 0.25rem;">
+                        <i class="fas fa-info-circle"></i> Instructions
+                    </div>
+                    <div style="font-size: 0.875rem; color: #78350f;">{{ stat.medicine.instructions }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Today's Schedule -->
     <div class="card">
         <div class="card-header">
