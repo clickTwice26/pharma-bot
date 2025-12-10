@@ -4,6 +4,7 @@
 #include <ESP32Servo.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <LiquidCrystal_I2C.h>
 
 const char* WIFI_SSID = "5hagat0-Private";
 const char* WIFI_PASSWORD = "1292?5hagat0";
@@ -29,6 +30,7 @@ const float MEDICINE_LOADED_DISTANCE = 5.0;
 Servo servos[NUM_COMPARTMENTS];
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", UTC_OFFSET, 60000);
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // I2C address 0x27, 16 columns, 2 rows
 
 int currentServoAngles[NUM_COMPARTMENTS] = {0, 0, 0};
 float currentDistance = 0.0;
@@ -64,6 +66,15 @@ void setup() {
   Serial.println("PharmaBot Medication Dispenser");
   Serial.println("=================================\n");
   
+  // Initialize LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("PharmaBot v1.0");
+  lcd.setCursor(0, 1);
+  lcd.print("Starting...");
+  
   pinMode(LED_PIN, OUTPUT);
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
@@ -89,6 +100,12 @@ void setup() {
   Serial.printf("Username: %s\n", USERNAME);
   Serial.printf("WiFi IP: %s\n", WiFi.localIP().toString().c_str());
   Serial.println("=================================\n");
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Ready! Schedules:");
+  lcd.setCursor(0, 1);
+  lcd.print(String(scheduleCount) + " loaded");
   
   playStartupSound();
 }
@@ -118,6 +135,7 @@ void loop() {
     currentDistance = getDistance();
     sendHardwareState();
     checkForCommands();
+    updateLCDDisplay();
   }
   
   blinkLED();
@@ -189,6 +207,12 @@ void dispenseFromCompartment(int compartmentNumber) {
   
   currentOperation = "dispensing_compartment_" + String(compartmentNumber);
   
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Dispensing Slot");
+  lcd.setCursor(0, 1);
+  lcd.print(String(compartmentNumber) + " - Please wait");
+  
   playAlertSound();
   
   // Attach servo for dispense operation
@@ -216,13 +240,25 @@ void dispenseFromCompartment(int compartmentNumber) {
   // Detach servo after operation to prevent jitter
   servos[index].detach();
   
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Dispensed!");
+  lcd.setCursor(0, 1);
+  lcd.print("Take medicine");
+  
   playSuccessSound();
+  delay(3000);  // Show success message for 3 seconds
   currentOperation = "idle";
   sendHardwareState();
 }
 
 void connectWiFi() {
   Serial.print("Connecting to WiFi");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Connecting WiFi");
+  lcd.setCursor(0, 1);
+  lcd.print("Please wait...");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
   int attempts = 0;
@@ -238,9 +274,22 @@ void connectWiFi() {
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
     digitalWrite(LED_PIN, LOW);
+    
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("WiFi Connected!");
+    lcd.setCursor(0, 1);
+    lcd.print(WiFi.localIP().toString());
+    delay(2000);
   } else {
     Serial.println("\n✗ WiFi connection failed!");
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("WiFi Failed!");
+    lcd.setCursor(0, 1);
+    lcd.print("Check Settings");
     playErrorSound();
+    delay(3000);
   }
 }
 
@@ -296,6 +345,11 @@ void syncSchedules() {
   }
   
   Serial.println("\nSyncing schedules from server...");
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Syncing...");
+  lcd.setCursor(0, 1);
+  lcd.print("Checking server");
   
   HTTPClient http;
   String url = String(SERVER_URL) + "/api/device/schedules?username=" + String(USERNAME);
@@ -349,6 +403,17 @@ void parseSchedules(String jsonResponse) {
   
   Serial.printf("✓ Loaded %d schedules\n", scheduleCount);
   
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Schedules: " + String(scheduleCount));
+  lcd.setCursor(0, 1);
+  if (scheduleCount > 0) {
+    lcd.print("Next: " + schedules[0].medicineName.substring(0, 10));
+  } else {
+    lcd.print("None scheduled");
+  }
+  delay(2000);
+  
   if (scheduleCount > 0) {
     Serial.println("\nUpcoming schedules:");
     for (int i = 0; i < min(5, scheduleCount); i++) {
@@ -399,6 +464,15 @@ void checkMedicationTimes() {
       Serial.println("\n⏰ MEDICATION TIME!");
       Serial.printf("Medicine: %s\n", schedules[i].medicineName.c_str());
       Serial.printf("Compartment: %d\n", schedules[i].compartmentNumber);
+      
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Time for:");
+      lcd.setCursor(0, 1);
+      String medName = schedules[i].medicineName;
+      if (medName.length() > 16) medName = medName.substring(0, 16);
+      lcd.print(medName);
+      delay(2000);
       
       dispenseFromCompartment(schedules[i].compartmentNumber);
       schedules[i].dispensed = true;
@@ -727,6 +801,52 @@ void executeCommand(String command, JsonObject params) {
     } else {
       Serial.printf("✗ Invalid compartment number: %d\n", compartment);
     }
+  }
+}
+
+void updateLCDDisplay() {
+  // Don't update LCD during active operations
+  if (currentOperation != "idle") {
+    return;
+  }
+  
+  static unsigned long lastLCDUpdate = 0;
+  
+  // Update LCD every 2 seconds when idle
+  if (millis() - lastLCDUpdate < 2000) {
+    return;
+  }
+  lastLCDUpdate = millis();
+  
+  lcd.clear();
+  
+  // First line: Current time
+  lcd.setCursor(0, 0);
+  lcd.print(timeClient.getFormattedTime());
+  
+  // Second line: Next medication or status
+  lcd.setCursor(0, 1);
+  
+  if (scheduleCount > 0) {
+    // Find next undispensed schedule
+    unsigned long currentTime = getCurrentEpochTime();
+    bool foundNext = false;
+    
+    for (int i = 0; i < scheduleCount; i++) {
+      if (!schedules[i].dispensed && schedules[i].scheduledTime > currentTime) {
+        String medName = schedules[i].medicineName;
+        if (medName.length() > 10) medName = medName.substring(0, 10);
+        lcd.print("Nxt:" + medName);
+        foundNext = true;
+        break;
+      }
+    }
+    
+    if (!foundNext) {
+      lcd.print("All done today!");
+    }
+  } else {
+    lcd.print("No schedules");
   }
 }
 
